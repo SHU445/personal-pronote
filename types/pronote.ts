@@ -135,6 +135,10 @@ export interface FocusConfig {
   }
   // Jours de préparation avant un contrôle
   testPrepDays: number
+  // Priorité des matières pour les révisions (1-5, 5 = priorité max). Clé = nom normalisé de la matière.
+  subjectPriorities?: Record<string, number>
+  // Matières désactivées pour les révisions (révisions ignorées). Les devoirs ne sont jamais ignorés.
+  disabledRevisionSubjects?: string[]
 }
 
 /**
@@ -278,4 +282,14 @@ export interface FocusStats {
   moyenneGenerale: number | null
   ecartCible: number | null
   tendanceGenerale: 'up' | 'down' | 'stable' | 'unknown'
+}
+
+/**
+ * Aperçu de la journée du lendemain (cours EDT + devoirs/contrôles)
+ */
+export interface TomorrowPreview {
+  date: string
+  lessons: Lesson[]
+  devoirs: Devoir[]
+  controles: Controle[]
 }

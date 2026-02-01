@@ -16,14 +16,15 @@ import {
   PenTool,
   ChevronRight,
   Sparkles,
+  Calendar,
 } from "lucide-react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
 import { cn } from "@/lib/utils"
-import type { Devoir, Note, Moyenne, FocusTask, FocusPlan, PriorityReason, TaskCategory } from "@/types/pronote"
-import { generateFocusPlan, DEFAULT_CONFIG } from "@/lib/focus-engine"
+import type { Devoir, Note, Moyenne, Lesson, Controle, FocusTask, FocusPlan, TaskCategory } from "@/types/pronote"
+import { generateFocusPlan, getTomorrowPreview, DEFAULT_CONFIG } from "@/lib/focus-engine"
 import { loadConfig, loadControles, markTaskCompleted, isTaskCompletedToday } from "@/lib/user-config"
 import { calculateGeneralAverage } from "@/lib/grade-analysis"
 
@@ -31,6 +32,10 @@ interface FocusTonightProps {
   devoirs: Devoir[]
   notes: Note[]
   moyennes: Moyenne[]
+  lessons?: Lesson[]
+  controles?: Controle[]
+  /** Clé incrémentée par la page quand les contrôles changent, pour forcer le recalcul du plan avec loadControles() */
+  planRefreshKey?: number
   compact?: boolean // Mode compact pour le dashboard principal
 }
 
@@ -320,23 +325,140 @@ function PlanSummary({
 }
 
 /**
+ * Aperçu du lendemain (cours + devoirs + contrôles)
+ */
+function TomorrowSection({
+  devoirs,
+  controles,
+  lessons,
+}: {
+  devoirs: Devoir[]
+  controles: Controle[]
+  lessons: Lesson[]
+}) {
+  const preview = useMemo(
+    () => getTomorrowPreview(devoirs, controles, lessons),
+    [devoirs, controles, lessons]
+  )
+  const hasAny =
+    preview.lessons.length > 0 || preview.devoirs.length > 0 || preview.controles.length > 0
+  if (!hasAny) return null
+
+  const dateLabel = new Date(preview.date).toLocaleDateString("fr-FR", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+  })
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-lg">
+          <Calendar className="h-5 w-5 text-primary" />
+          Demain {dateLabel}
+        </CardTitle>
+        <CardDescription>
+          Cours, devoirs et contrôles prévus pour la journée du lendemain
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {preview.lessons.length > 0 && (
+          <div>
+            <h4 className="text-sm font-semibold mb-2 flex items-center gap-1">
+              <BookOpen className="h-4 w-4" />
+              Emploi du temps
+            </h4>
+            <ul className="space-y-1.5 text-sm">
+              {preview.lessons.map((l) => {
+                const start = l.debut?.includes("T")
+                  ? l.debut.slice(11, 16)
+                  : l.debut?.slice(0, 5) || ""
+                const end = l.fin?.includes("T")
+                  ? l.fin.slice(11, 16)
+                  : l.fin?.slice(0, 5) || ""
+                return (
+                  <li
+                    key={l.id}
+                    className="flex items-center justify-between py-1.5 px-2 rounded-lg bg-muted/50"
+                  >
+                    <span className="font-medium">{l.matiere}</span>
+                    <span className="text-muted-foreground text-xs">
+                      {start}
+                      {end ? ` – ${end}` : ""}
+                      {l.salle ? ` • ${l.salle}` : ""}
+                    </span>
+                  </li>
+                )
+              })}
+            </ul>
+          </div>
+        )}
+        {(preview.devoirs.length > 0 || preview.controles.length > 0) && (
+          <div>
+            <h4 className="text-sm font-semibold mb-2 flex items-center gap-1">
+              <Target className="h-4 w-4" />
+              À rendre / Contrôles
+            </h4>
+            <ul className="space-y-1.5 text-sm">
+              {preview.devoirs.map((d) => (
+                <li
+                  key={d.matiere + d.date_rendu + d.description}
+                  className="flex items-start gap-2 py-1.5 px-2 rounded-lg bg-amber-500/10 border border-amber-500/20"
+                >
+                  <FileText className="h-4 w-4 text-amber-500 mt-0.5 shrink-0" />
+                  <div>
+                    <span className="font-medium">{d.matiere}</span>
+                    <p className="text-muted-foreground line-clamp-1">{d.description}</p>
+                  </div>
+                </li>
+              ))}
+              {preview.controles.map((c) => (
+                <li
+                  key={c.id}
+                  className="flex items-start gap-2 py-1.5 px-2 rounded-lg bg-red-500/10 border border-red-500/20"
+                >
+                  <Target className="h-4 w-4 text-red-500 mt-0.5 shrink-0" />
+                  <div>
+                    <span className="font-medium">{c.matiere}</span>
+                    <p className="text-muted-foreground text-xs">
+                      {c.type.toUpperCase()} • {c.dureeRevision ?? 45}min révision
+                    </p>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
+
+/**
  * Composant principal Focus Tonight
  */
-export function FocusTonight({ devoirs, notes, moyennes, compact = false }: FocusTonightProps) {
+export function FocusTonight({
+  devoirs,
+  notes,
+  moyennes,
+  lessons = [],
+  controles = [],
+  planRefreshKey = 0,
+  compact = false,
+}: FocusTonightProps) {
   const [config, setConfig] = useState(DEFAULT_CONFIG)
-  const [controles, setControles] = useState<any[]>([])
   const [refreshKey, setRefreshKey] = useState(0)
 
   // Charger la configuration au montage
   useEffect(() => {
     setConfig(loadConfig())
-    setControles(loadControles())
   }, [])
 
-  // Générer le plan de travail
+  // Générer le plan : on lit les contrôles depuis localStorage pour être sûr d'avoir les derniers (après ajout)
   const plan = useMemo(() => {
-    return generateFocusPlan(devoirs, notes, moyennes, controles, config)
-  }, [devoirs, notes, moyennes, controles, config, refreshKey])
+    const controlesPourPlan = typeof window !== "undefined" ? loadControles() : (controles ?? [])
+    return generateFocusPlan(devoirs, notes, moyennes, controlesPourPlan, config, lessons)
+  }, [devoirs, notes, moyennes, controles, config, lessons, refreshKey, planRefreshKey])
 
   // Calculer la moyenne générale
   const currentAverage = useMemo(() => {
@@ -501,6 +623,9 @@ export function FocusTonight({ devoirs, notes, moyennes, compact = false }: Focu
           )}
         </CardContent>
       </Card>
+
+      {/* Aperçu du lendemain */}
+      <TomorrowSection devoirs={devoirs} controles={controles} lessons={lessons} />
     </div>
   )
 }

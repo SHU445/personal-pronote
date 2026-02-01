@@ -1,14 +1,16 @@
 "use client"
 
-import { useContext, useState } from "react"
+import { useContext, useState, useEffect, useMemo } from "react"
 import { DataContext } from "../layout"
 import { FocusTonight } from "@/components/dashboard/FocusTonight"
 import { GradeSimulator } from "@/components/dashboard/GradeSimulator"
 import { ControleForm } from "@/components/dashboard/ControleForm"
 import { Skeleton } from "@/components/ui/skeleton"
-import { Card, CardContent, CardHeader } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardDescription } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Sparkles, Calculator, Settings } from "lucide-react"
+import { loadControles } from "@/lib/user-config"
+import type { Controle } from "@/types/pronote"
 
 function LoadingSkeleton() {
   return (
@@ -49,14 +51,20 @@ function LoadingSkeleton() {
 
 export default function FocusPage() {
   const { data, loading } = useContext(DataContext)
-  const [refreshKey, setRefreshKey] = useState(0)
+  const [controles, setControles] = useState<Controle[]>([])
+  const [planRefreshKey, setPlanRefreshKey] = useState(0)
+
+  useEffect(() => {
+    setControles(loadControles())
+  }, [])
 
   if (loading || !data) {
     return <LoadingSkeleton />
   }
 
   const handleControleAdded = () => {
-    setRefreshKey(k => k + 1)
+    setControles(loadControles())
+    setPlanRefreshKey((k) => k + 1)
   }
 
   return (
@@ -77,13 +85,15 @@ export default function FocusPage() {
           </TabsTrigger>
         </TabsList>
 
-        {/* Focus Tonight */}
+        {/* Focus Tonight - planRefreshKey force le recalcul du plan avec les derniers contrôles (localStorage) */}
         <TabsContent value="tonight" className="space-y-6 mt-0">
           <FocusTonight
-            key={refreshKey}
             devoirs={data.devoirs || []}
             notes={data.notes || []}
             moyennes={data.moyennes || []}
+            lessons={data.lessons || []}
+            controles={controles}
+            planRefreshKey={planRefreshKey}
           />
           
           {/* Contrôles à venir */}
@@ -100,7 +110,11 @@ export default function FocusPage() {
 
         {/* Paramètres */}
         <TabsContent value="settings" className="mt-0">
-          <FocusSettings />
+          <FocusSettings
+            lessons={data.lessons || []}
+            devoirs={data.devoirs || []}
+            moyennes={data.moyennes || []}
+          />
         </TabsContent>
       </Tabs>
     </div>
@@ -110,7 +124,15 @@ export default function FocusPage() {
 /**
  * Composant de configuration Focus Tonight
  */
-function FocusSettings() {
+function FocusSettings({
+  lessons,
+  devoirs,
+  moyennes,
+}: {
+  lessons: import('@/types/pronote').Lesson[]
+  devoirs: import('@/types/pronote').Devoir[]
+  moyennes: import('@/types/pronote').Moyenne[]
+}) {
   const [config, setConfig] = useState(() => {
     if (typeof window === 'undefined') {
       const { DEFAULT_CONFIG } = require('@/lib/focus-engine')
@@ -137,6 +159,28 @@ function FocusSettings() {
 
   const updateField = <K extends keyof typeof config>(key: K, value: typeof config[K]) => {
     setConfig({ ...config, [key]: value })
+  }
+
+  // Matières : EDT en priorité, puis devoirs/moyennes
+  const allSubjects = useMemo(() => {
+    const { getSubjectsFromLessons, normalizeSubject } = require('@/lib/focus-engine')
+    const set = new Set<string>()
+    getSubjectsFromLessons(lessons).forEach(s => set.add(s))
+    devoirs.forEach(d => set.add(normalizeSubject(d.matiere)))
+    moyennes.forEach(m => set.add(normalizeSubject(m.matiere)))
+    return Array.from(set).sort((a, b) => a.localeCompare(b))
+  }, [lessons, devoirs, moyennes])
+
+  const setSubjectPriority = (matiere: string, priority: number) => {
+    const next = { ...(config.subjectPriorities ?? {}), [matiere]: priority }
+    setConfig({ ...config, subjectPriorities: next })
+  }
+  const setRevisionDisabled = (matiere: string, disabled: boolean) => {
+    const current = config.disabledRevisionSubjects ?? []
+    const next = disabled
+      ? [...current, matiere]
+      : current.filter(m => m !== matiere)
+    setConfig({ ...config, disabledRevisionSubjects: next })
   }
 
   return (
@@ -302,6 +346,57 @@ function FocusSettings() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Matières : priorité et révisions */}
+      {allSubjects.length > 0 && (
+        <Card className="lg:col-span-2">
+          <CardHeader>
+            <h3 className="font-semibold">Matières (révisions de cours)</h3>
+            <CardDescription>
+              Priorité pour les révisions de cours (issues de l&apos;emploi du temps). Les devoirs ne sont jamais ignorés, même si une matière est désactivée.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {allSubjects.map((matiere) => {
+                const priority = config.subjectPriorities?.[matiere] ?? 3
+                const revisionDisabled = (config.disabledRevisionSubjects ?? []).includes(matiere)
+                return (
+                  <div
+                    key={matiere}
+                    className="flex flex-wrap items-center gap-4 p-3 rounded-xl border bg-card"
+                  >
+                    <span className="font-medium min-w-[140px]">{matiere}</span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-muted-foreground">Priorité révision</span>
+                      <input
+                        type="range"
+                        min="1"
+                        max="5"
+                        value={priority}
+                        onChange={e => setSubjectPriority(matiere, parseInt(e.target.value))}
+                        className="w-24"
+                      />
+                      <span className="text-sm font-medium w-6">{priority}/5</span>
+                    </div>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={revisionDisabled}
+                        onChange={e => setRevisionDisabled(matiere, e.target.checked)}
+                        className="h-4 w-4 rounded border-input"
+                      />
+                      <span className="text-sm text-muted-foreground">
+                        Ignorer les révisions (les devoirs restent affichés)
+                      </span>
+                    </label>
+                  </div>
+                )
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Boutons de sauvegarde */}
       <div className="flex gap-3 justify-end">

@@ -10,9 +10,11 @@ import type {
   Note,
   Moyenne,
   Controle,
+  Lesson,
   FocusConfig,
   FocusTask,
   FocusPlan,
+  TomorrowPreview,
   PriorityReason,
   TaskType,
   TaskCategory,
@@ -40,6 +42,8 @@ export const DEFAULT_CONFIG: FocusConfig = {
     testPrep: 45,
   },
   testPrepDays: 3,
+  subjectPriorities: {},
+  disabledRevisionSubjects: [],
 }
 
 // ==========================================
@@ -318,7 +322,7 @@ function determineTaskCategory(
   if (source === 'devoir' && daysUntil <= 3) {
     return 'strategique' // Devoir dans 2-3 jours
   }
-  if (analysis?.moyenneEleve !== null && analysis.moyenneEleve < 12) {
+  if (analysis != null && analysis.moyenneEleve !== null && analysis.moyenneEleve < 12) {
     return 'strategique' // Moyenne faible
   }
   
@@ -366,7 +370,7 @@ function generateJustifications(
   }
   
   // 2. Matière en difficulté
-  if (analysis?.moyenneEleve !== null && analysis.moyenneEleve < 10) {
+  if (analysis != null && analysis.moyenneEleve !== null && analysis.moyenneEleve < 10) {
     reasons.push(`Moyenne critique (${analysis.moyenneEleve.toFixed(1)}/20)`)
   } else if (analysis?.needsAttention) {
     reasons.push("Matière à améliorer")
@@ -717,25 +721,92 @@ function createRevisionRecommendation(
 }
 
 /**
+ * Extrait les matières uniques de l'emploi du temps (cours du jour ou de la semaine)
+ */
+export function getSubjectsFromLessons(lessons: Lesson[]): string[] {
+  const set = new Set<string>()
+  lessons.forEach(l => {
+    const norm = normalizeSubject(l.matiere)
+    if (norm) set.add(norm)
+  })
+  return Array.from(set)
+}
+
+/**
+ * Crée une tâche de révision de cours pour une matière de l'EDT (sans devoir à rendre ce soir)
+ */
+function createEdtRevisionTask(
+  matiere: string,
+  config: FocusConfig,
+  subjectAnalysis: SubjectAnalysis | undefined,
+  currentPlanTime: number,
+  currentPlanCount: number
+): FocusTask {
+  const priority = config.subjectPriorities?.[matiere] ?? 3 // 1-5, défaut 3
+  const estimatedTime = config.estimatedTimePerTask.revision
+  
+  const components: ScoreComponents = {
+    urgency: 0,
+    importance: calculateImportanceScore(matiere, subjectAnalysis, config),
+    needsWork: calculateNeedsWorkScore(subjectAnalysis),
+    complexity: 0,
+    loadAdjustment: calculateLoadAdjustment(
+      estimatedTime, 7, currentPlanTime, currentPlanCount, config
+    ),
+  }
+  
+  // Bonus priorité utilisateur (1-5 → +0 à +20 pts) pour les faire remonter dans la sélection
+  const priorityBonus = (priority - 1) * 5
+  const rawScore = Math.min(65,
+    components.importance + components.needsWork + components.loadAdjustment + priorityBonus
+  )
+  const score = Math.max(0, rawScore)
+  // Stratégique pour que les révisions de cours soient sélectionnées (optionnel = souvent ignoré à cause de la limite de matières)
+  const category: TaskCategory = 'strategique'
+  const priorityLevel = mapScoreToLevel(score, category)
+  
+  return {
+    id: generateId(),
+    type: 'revision',
+    matiere,
+    title: 'Révision de cours',
+    description: `Revoir le cours de ${matiere} (pas de travail à rendre)`,
+    estimatedTime,
+    score,
+    scoreComponents: components,
+    category,
+    priorityLevel,
+    primaryReason: `Cours au programme • priorité ${priority}/5`,
+    secondaryReason: subjectAnalysis?.needsAttention ? 'Matière à consolider' : undefined,
+    reasons: [
+      { type: 'anticipation', label: 'Révision de cours', urgency: 'low' },
+    ],
+    source: 'recommendation',
+    completed: false,
+  }
+}
+
+/**
  * Génère le plan de travail pour ce soir (v2)
  * 
  * Algorithme de sélection v2:
- * 1. Scorer tous les devoirs/contrôles avec la nouvelle formule
- * 2. Sélectionner les OBLIGATOIRES en premier (toujours inclus)
- * 3. Ajouter les STRATEGIQUES jusqu'à atteindre la limite de temps
- * 4. Compléter avec les OPTIONNELS si du temps reste
- * 5. Appliquer les contraintes (temps max, matières max)
+ * 1. Scorer tous les devoirs/contrôles avec la nouvelle formule (les devoirs ne sont jamais ignorés, même si matière désactivée)
+ * 2. Ajouter les révisions de cours pour les matières de l'EDT sans travail à faire (sauf matières désactivées)
+ * 3. Sélectionner les OBLIGATOIRES en premier (toujours inclus)
+ * 4. Ajouter les STRATEGIQUES puis OPTIONNELS selon contraintes
  */
 export function generateFocusPlan(
   devoirs: Devoir[],
   notes: Note[],
   moyennes: Moyenne[],
   controles: Controle[],
-  config: FocusConfig = DEFAULT_CONFIG
+  config: FocusConfig = DEFAULT_CONFIG,
+  lessons: Lesson[] = []
 ): FocusPlan {
   const today = new Date()
   today.setHours(0, 0, 0, 0)
   const todayStr = today.toISOString().split('T')[0]
+  const disabledRevisions = new Set(config.disabledRevisionSubjects ?? [])
   
   // Analyser toutes les matières
   const subjectAnalyses = new Map<string, SubjectAnalysis>()
@@ -743,6 +814,7 @@ export function generateFocusPlan(
   
   moyennes.forEach(m => uniqueSubjects.add(normalizeSubject(m.matiere)))
   devoirs.forEach(d => uniqueSubjects.add(normalizeSubject(d.matiere)))
+  getSubjectsFromLessons(lessons).forEach(s => uniqueSubjects.add(s))
   
   uniqueSubjects.forEach(subject => {
     const analysis = analyzeSubject(subject, notes, moyennes, config.targetAverage)
@@ -751,11 +823,10 @@ export function generateFocusPlan(
     }
   })
   
-  // Filtrer les devoirs non faits et dans la fenêtre d'anticipation
+  // Filtrer les devoirs non faits et dans la fenêtre d'anticipation (jamais filtrés par matière désactivée)
   const relevantDevoirs = devoirs.filter(d => {
     if (d.fait) return false
     const daysUntil = getDaysUntil(d.date_rendu)
-    // Inclure les devoirs en retard et ceux dans la fenêtre d'anticipation
     return daysUntil <= config.anticipationDays
   })
   
@@ -781,11 +852,28 @@ export function generateFocusPlan(
     allTasks.push(task)
   })
   
-  // 3. Ajouter des recommandations de révision si peu de tâches obligatoires
+  // 3. Révisions de cours : matières de l'EDT (ou à défaut devoirs/moyennes) sans travail à faire ce soir, non désactivées
+  const subjectsWithTask = new Set(allTasks.map(t => t.matiere))
+  let revisionSubjects = getSubjectsFromLessons(lessons)
+  if (revisionSubjects.length === 0) {
+    // Fallback : matières des devoirs et moyennes (pour proposer des révisions même sans EDT)
+    const fallback = new Set<string>()
+    devoirs.forEach(d => fallback.add(normalizeSubject(d.matiere)))
+    moyennes.forEach(m => fallback.add(normalizeSubject(m.matiere)))
+    revisionSubjects = Array.from(fallback)
+  }
+  revisionSubjects.forEach(subject => {
+    if (subjectsWithTask.has(subject) || disabledRevisions.has(subject)) return
+    const analysis = subjectAnalyses.get(subject)
+    const task = createEdtRevisionTask(subject, config, analysis, 0, allTasks.length)
+    allTasks.push(task)
+  })
+  
+  // 4. Recommandations de révision (matières en difficulté) si peu d'obligatoires
   const obligatoireCount = allTasks.filter(t => t.category === 'obligatoire').length
   if (obligatoireCount < 2) {
     const needsAttention = Array.from(subjectAnalyses.values())
-      .filter(a => a.needsAttention && a.priority === 'high')
+      .filter(a => a.needsAttention && a.priority === 'high' && !disabledRevisions.has(a.matiere))
       .slice(0, 3 - obligatoireCount)
     
     needsAttention.forEach(analysis => {
@@ -918,6 +1006,37 @@ export function generateFocusPlan(
     isOverloaded,
     warnings,
     recommendations,
+  }
+}
+
+/**
+ * Retourne ce qui est prévu pour la journée du lendemain (cours EDT + devoirs + contrôles)
+ */
+export function getTomorrowPreview(
+  devoirs: Devoir[],
+  controles: Controle[],
+  lessons: Lesson[] = []
+): TomorrowPreview {
+  const tomorrow = new Date()
+  tomorrow.setDate(tomorrow.getDate() + 1)
+  const y = tomorrow.getFullYear()
+  const m = String(tomorrow.getMonth() + 1).padStart(2, '0')
+  const d = String(tomorrow.getDate()).padStart(2, '0')
+  const tomorrowStr = `${y}-${m}-${d}`
+  
+  const tomorrowLessons = lessons.filter(l => {
+    const lessonDate = l.debut?.split('T')[0] || l.debut?.slice(0, 10)
+    return lessonDate === tomorrowStr
+  }).sort((a, b) => (a.debut || '').localeCompare(b.debut || ''))
+  
+  const tomorrowDevoirs = devoirs.filter(d => !d.fait && d.date_rendu === tomorrowStr)
+  const tomorrowControles = controles.filter(c => c.date === tomorrowStr)
+  
+  return {
+    date: tomorrowStr,
+    lessons: tomorrowLessons,
+    devoirs: tomorrowDevoirs,
+    controles: tomorrowControles,
   }
 }
 
