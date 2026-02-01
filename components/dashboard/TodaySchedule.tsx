@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import type { Lesson } from "@/types/pronote"
-import { formatTime, cn } from "@/lib/utils"
+import { formatTime, cn, formatDateLocal, extractDateFromDatetime, getSubjectColor } from "@/lib/utils"
 
 interface TodayScheduleProps {
   lessons: Lesson[]
@@ -14,15 +14,12 @@ interface TodayScheduleProps {
 
 export function TodaySchedule({ lessons }: TodayScheduleProps) {
   // Filtrer les cours d'aujourd'hui
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-  const tomorrow = new Date(today)
-  tomorrow.setDate(tomorrow.getDate() + 1)
+  const todayStr = formatDateLocal(new Date())
 
   const todayLessons = lessons
     .filter((l) => {
-      const lessonDate = new Date(l.debut)
-      return lessonDate >= today && lessonDate < tomorrow
+      const lessonDate = extractDateFromDatetime(l.debut)
+      return lessonDate === todayStr
     })
     .sort((a, b) => new Date(a.debut).getTime() - new Date(b.debut).getTime())
 
@@ -84,24 +81,27 @@ export function TodaySchedule({ lessons }: TodayScheduleProps) {
         <div className="space-y-2">
           {todayLessons.map((lesson, index) => {
             const isCurrent = isCurrentLesson(lesson)
+            const colors = getSubjectColor(lesson.matiere)
+            const subjectName = lesson.matiere.split(" > ")[0]
+            
             return (
               <div
                 key={index}
                 className={cn(
-                  "group flex items-start gap-3 p-3 rounded-xl border transition-all duration-300",
+                  "group flex items-start gap-3 p-3 rounded-xl border-l-4 transition-all duration-300",
                   "hover:shadow-md hover:-translate-y-0.5",
                   lesson.annule 
-                    ? "bg-muted/30 border-border/50 opacity-60" 
+                    ? "bg-muted/30 border-destructive/50 opacity-60" 
                     : isCurrent
-                      ? "bg-primary/5 border-primary/30 ring-1 ring-primary/20"
-                      : "bg-card border-border/50 hover:bg-accent/30"
+                      ? cn(colors.bg, "ring-2 ring-primary/30", colors.border.replace('border-', 'border-l-'))
+                      : cn(colors.bg, colors.border.replace('border-', 'border-l-'), "hover:shadow-lg")
                 )}
               >
                 {/* Timeline indicator */}
                 <div className="relative flex flex-col items-center shrink-0 w-14">
                   <div className={cn(
                     "text-xs font-semibold px-2 py-1 rounded-md",
-                    isCurrent ? "bg-primary text-primary-foreground" : "bg-muted"
+                    isCurrent ? "bg-primary text-primary-foreground" : "bg-background/80 border"
                   )}>
                     {formatTime(lesson.debut)}
                   </div>
@@ -117,13 +117,13 @@ export function TodaySchedule({ lessons }: TodayScheduleProps) {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className={cn(
-                      "font-medium text-sm",
-                      lesson.annule && "line-through text-muted-foreground"
+                      "font-semibold text-sm",
+                      lesson.annule ? "line-through text-muted-foreground" : colors.text
                     )}>
-                      {lesson.matiere.split(" > ")[0]}
+                      {subjectName}
                     </span>
                     {isCurrent && (
-                      <Badge className="text-[10px] px-1.5 py-0 bg-primary/20 text-primary border-0">
+                      <Badge className="text-[10px] px-1.5 py-0 bg-primary text-primary-foreground border-0">
                         En cours
                       </Badge>
                     )}
@@ -136,7 +136,7 @@ export function TodaySchedule({ lessons }: TodayScheduleProps) {
                     {lesson.modifie && !lesson.annule && (
                       <Badge className="text-[10px] px-1.5 py-0 bg-amber-500/20 text-amber-600 dark:text-amber-400 border-0 gap-0.5">
                         <AlertTriangle className="h-3 w-3" />
-                        Modifié
+                        {typeof lesson.modifie === 'string' ? lesson.modifie : 'Modifié'}
                       </Badge>
                     )}
                   </div>
@@ -148,7 +148,7 @@ export function TodaySchedule({ lessons }: TodayScheduleProps) {
                       </span>
                     )}
                     {lesson.salle && (
-                      <span className="flex items-center gap-1 text-xs bg-muted/50 px-1.5 py-0.5 rounded">
+                      <span className="flex items-center gap-1 text-xs bg-background/50 px-1.5 py-0.5 rounded border">
                         <MapPin className="h-3 w-3" />
                         {lesson.salle}
                       </span>

@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation"
 import { RefreshCw, Menu, User, Clock } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { ThemeToggle } from "@/components/ThemeToggle"
-import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
+import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
 import { MobileNav } from "./MobileNav"
 import type { Eleve } from "@/types/pronote"
 import { cn } from "@/lib/utils"
@@ -43,6 +43,7 @@ export function Header({ eleve, onRefresh, refreshing, lastRefresh }: HeaderProp
             </Button>
           </SheetTrigger>
           <SheetContent side="left" className="p-0 w-72 border-r-0">
+            <SheetTitle className="sr-only">Menu de navigation</SheetTitle>
             <MobileNav onNavigate={() => setMobileOpen(false)} />
           </SheetContent>
         </Sheet>
