@@ -165,7 +165,7 @@ function FocusSettings({
   const allSubjects = useMemo(() => {
     const { getSubjectsFromLessons, normalizeSubject } = require('@/lib/focus-engine')
     const set = new Set<string>()
-    getSubjectsFromLessons(lessons).forEach(s => set.add(s))
+    getSubjectsFromLessons(lessons).forEach((s: string) => set.add(s))
     devoirs.forEach(d => set.add(normalizeSubject(d.matiere)))
     moyennes.forEach(m => set.add(normalizeSubject(m.matiere)))
     return Array.from(set).sort((a, b) => a.localeCompare(b))
@@ -179,7 +179,7 @@ function FocusSettings({
     const current = config.disabledRevisionSubjects ?? []
     const next = disabled
       ? [...current, matiere]
-      : current.filter(m => m !== matiere)
+      : current.filter((m: string) => m !== matiere)
     setConfig({ ...config, disabledRevisionSubjects: next })
   }
 

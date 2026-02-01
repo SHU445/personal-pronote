@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { Suspense, useEffect, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Sparkles, RefreshCw, AlertCircle, Shield, Zap, Lock } from "lucide-react"
 import { QRCodeLogin } from "@/components/auth/QRCodeLogin"
@@ -8,7 +8,7 @@ import { ThemeToggle } from "@/components/ThemeToggle"
 import { checkAuthStatus } from "@/lib/api"
 import { cn } from "@/lib/utils"
 
-export default function LoginPage() {
+function LoginContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const [checking, setChecking] = useState(true)
@@ -129,5 +129,29 @@ export default function LoginPage() {
         </div>
       </footer>
     </div>
+  )
+}
+
+function LoginFallback() {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-background to-primary/5">
+      <div className="flex flex-col items-center gap-4">
+        <div className="relative">
+          <div className="absolute inset-0 bg-primary/20 blur-2xl rounded-full animate-pulse" />
+          <div className="relative flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-primary to-primary/80 shadow-xl shadow-primary/25">
+            <RefreshCw className="h-8 w-8 text-primary-foreground animate-spin" />
+          </div>
+        </div>
+        <p className="text-muted-foreground font-medium">Chargement...</p>
+      </div>
+    </div>
+  )
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<LoginFallback />}>
+      <LoginContent />
+    </Suspense>
   )
 }
