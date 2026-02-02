@@ -4,6 +4,7 @@ import { promisify } from 'util'
 import path from 'path'
 import { promises as fs } from 'fs'
 import { getPronoteCache, useNeon } from '@/lib/db'
+import { fetchAllPronoteData } from '@/lib/pronote'
 
 const execAsync = promisify(exec)
 
@@ -86,37 +87,79 @@ export async function GET() {
   }
 }
 
-// POST: Actualiser les donnees depuis Pronote
+// POST: Actualiser les donnees depuis Pronote (Pawnote si Neon, sinon Python)
 export async function POST() {
   log('=== POST REFRESH DATA ===')
-  
+
+  if (useNeon()) {
+    try {
+      const result = await fetchAllPronoteData()
+      if ('error' in result) {
+        log('Neon refresh erreur:', result.error)
+        const row = await getPronoteCache()
+        const cachedData = (row?.data as Record<string, unknown>) ?? {}
+        if (Object.keys(cachedData).length > 0) {
+          return NextResponse.json({
+            success: true,
+            data: cachedData,
+            cached: true,
+            error: result.error,
+            tokenExpired: (result.details as { token_expired?: boolean })?.token_expired ?? /expire|token/i.test(result.error)
+          })
+        }
+        return NextResponse.json({
+          success: false,
+          error: result.error,
+          tokenExpired: (result.details as { token_expired?: boolean })?.token_expired ?? /expire|token/i.test(result.error)
+        })
+      }
+      log('Neon refresh succès:', { export_date: result.export_date, eleve: result.eleve?.nom })
+      return NextResponse.json({
+        success: true,
+        data: result,
+        cached: false,
+        refreshedAt: new Date().toISOString()
+      })
+    } catch (error) {
+      logError('Neon exception:', error)
+      const row = await getPronoteCache()
+      const data = (row?.data as Record<string, unknown>) ?? {}
+      if (Object.keys(data).length > 0) {
+        return NextResponse.json({
+          success: true,
+          data,
+          cached: true,
+          refreshError: error instanceof Error ? error.message : 'Erreur'
+        })
+      }
+      return NextResponse.json({
+        success: false,
+        error: error instanceof Error ? error.message : 'Erreur'
+      })
+    }
+  }
+
   try {
     const backendDir = path.join(process.cwd(), 'backend')
     const pythonScript = path.join(backendDir, 'pronote_client.py')
-    
-    // Vérifier credentials avant d'appeler (fichier uniquement ; si Neon, Python vérifiera)
-    if (!useNeon()) {
-      const credsPath = path.join(backendDir, 'credentials.json')
-      try {
-        const creds = await fs.readFile(credsPath, 'utf-8')
-        const credsData = JSON.parse(creds)
-        log('Credentials disponibles:', {
-          url: credsData.url?.substring(0, 50) + '...',
-          username: credsData.username,
-          hasPassword: !!credsData.password,
-          passwordLength: credsData.password?.length || 0,
-          hasUuid: !!credsData.uuid
-        })
-      } catch {
-        logError('Aucun credentials.json - connexion impossible')
-        return NextResponse.json({
-          success: false,
-          error: 'Non connecté - aucun token sauvegardé',
-          tokenExpired: true
-        })
-      }
-    } else {
-      log('Neon actif - vérification credentials côté Python')
+    const credsPath = path.join(backendDir, 'credentials.json')
+    try {
+      const creds = await fs.readFile(credsPath, 'utf-8')
+      const credsData = JSON.parse(creds)
+      log('Credentials disponibles:', {
+        url: credsData.url?.substring(0, 50) + '...',
+        username: credsData.username,
+        hasPassword: !!credsData.password,
+        passwordLength: credsData.password?.length || 0,
+        hasUuid: !!credsData.uuid
+      })
+    } catch {
+      logError('Aucun credentials.json - connexion impossible')
+      return NextResponse.json({
+        success: false,
+        error: 'Non connecté - aucun token sauvegardé',
+        tokenExpired: true
+      })
     }
 
     const command = `python "${pythonScript}" data`

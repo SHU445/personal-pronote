@@ -2,10 +2,11 @@ import { NextResponse } from 'next/server'
 import { exec } from 'child_process'
 import { promisify } from 'util'
 import path from 'path'
+import { useNeon } from '@/lib/db'
+import { logoutPronote } from '@/lib/pronote'
 
 const execAsync = promisify(exec)
 
-// Helper pour les logs avec timestamp
 function log(message: string, data?: unknown) {
   const timestamp = new Date().toISOString()
   console.log(`[${timestamp}] [Auth Logout] ${message}`, data !== undefined ? JSON.stringify(data, null, 2) : '')
@@ -18,39 +19,38 @@ function logError(message: string, error?: unknown) {
 
 export async function POST() {
   log('=== LOGOUT ===')
-  
+
+  if (useNeon()) {
+    try {
+      const result = await logoutPronote()
+      log('Neon: résultat logout', result)
+      return NextResponse.json(result)
+    } catch (error) {
+      logError('Neon exception:', error)
+      return NextResponse.json({
+        success: false,
+        error: error instanceof Error ? error.message : 'Erreur de deconnexion'
+      }, { status: 500 })
+    }
+  }
+
   try {
     const backendDir = path.join(process.cwd(), 'backend')
     const pythonScript = path.join(backendDir, 'pronote_client.py')
-    
     const command = `python "${pythonScript}" logout`
     log('Exécution:', command)
-    
-    const startTime = Date.now()
-    const { stdout, stderr } = await execAsync(command, { 
+    const { stdout, stderr } = await execAsync(command, {
       cwd: backendDir,
       timeout: 10000,
       encoding: 'utf8',
       env: { ...process.env, PYTHONIOENCODING: 'utf-8' }
     })
-    const duration = Date.now() - startTime
-    
-    log(`Commande terminée en ${duration}ms`)
-    log('STDOUT:', stdout.trim())
-    
-    if (stderr) {
-      log('STDERR:', stderr)
-    }
-    
+    if (stderr) log('STDERR:', stderr)
     const result = JSON.parse(stdout.trim())
     log('Résultat:', result)
-    log('=== FIN LOGOUT ===')
-    
     return NextResponse.json(result)
-    
   } catch (error) {
     logError('Exception:', error)
-    log('=== FIN LOGOUT - ERREUR ===')
     return NextResponse.json({
       success: false,
       error: error instanceof Error ? error.message : 'Erreur de deconnexion'
