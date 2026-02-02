@@ -52,7 +52,7 @@ export function MenusList({ menus }: MenusListProps) {
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {upcomingMenus.map((menu, index) => (
             <Card
-              key={index}
+              key={`menu-${menu.date}-${menu.repas}-${index}`}
               className={isToday(menu.date) ? "border-primary" : ""}
             >
               <CardHeader className="pb-2">
@@ -76,7 +76,7 @@ export function MenusList({ menus }: MenusListProps) {
                     </div>
                     <ul className="text-sm text-muted-foreground space-y-0.5 ml-6">
                       {menu.entrees.map((e, i) => (
-                        <li key={i}>{e}</li>
+                        <li key={`entree-${i}-${e}`}>{e}</li>
                       ))}
                     </ul>
                   </div>
@@ -90,7 +90,7 @@ export function MenusList({ menus }: MenusListProps) {
                     </div>
                     <ul className="text-sm text-muted-foreground space-y-0.5 ml-6">
                       {menu.plats.map((p, i) => (
-                        <li key={i}>{p}</li>
+                        <li key={`plat-${i}-${p}`}>{p}</li>
                       ))}
                     </ul>
                   </div>
@@ -104,7 +104,7 @@ export function MenusList({ menus }: MenusListProps) {
                     </div>
                     <ul className="text-sm text-muted-foreground space-y-0.5 ml-6">
                       {menu.accompagnements.map((a, i) => (
-                        <li key={i}>{a}</li>
+                        <li key={`accomp-${i}-${a}`}>{a}</li>
                       ))}
                     </ul>
                   </div>
@@ -118,7 +118,7 @@ export function MenusList({ menus }: MenusListProps) {
                     </div>
                     <ul className="text-sm text-muted-foreground space-y-0.5 ml-6">
                       {menu.desserts.map((d, i) => (
-                        <li key={i}>{d}</li>
+                        <li key={`dessert-${i}-${d}`}>{d}</li>
                       ))}
                     </ul>
                   </div>

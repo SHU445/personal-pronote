@@ -195,7 +195,7 @@ export function DevoirsList({ devoirs }: DevoirsListProps) {
                           {devoir.fichiers && devoir.fichiers.length > 0 && (
                             <div className="flex flex-wrap gap-2 mt-2">
                               {devoir.fichiers.map((fichier, i) => (
-                                <Badge key={i} variant="outline" className="text-xs">
+                                <Badge key={`fichier-${i}-${fichier}`} variant="outline" className="text-xs">
                                   <FileText className="h-3 w-3 mr-1" />
                                   {fichier}
                                 </Badge>

@@ -369,7 +369,7 @@ function TomorrowSection({
               Emploi du temps
             </h4>
             <ul className="space-y-1.5 text-sm">
-              {preview.lessons.map((l) => {
+              {preview.lessons.map((l, index) => {
                 const start = l.debut?.includes("T")
                   ? l.debut.slice(11, 16)
                   : l.debut?.slice(0, 5) || ""
@@ -378,7 +378,7 @@ function TomorrowSection({
                   : l.fin?.slice(0, 5) || ""
                 return (
                   <li
-                    key={l.id}
+                    key={l.id ? String(l.id) : `lesson-${index}-${l.matiere}-${l.debut ?? ""}-${l.fin ?? ""}`}
                     className="flex items-center justify-between py-1.5 px-2 rounded-lg bg-muted/50"
                   >
                     <span className="font-medium">{l.matiere}</span>
@@ -400,9 +400,9 @@ function TomorrowSection({
               À rendre / Contrôles
             </h4>
             <ul className="space-y-1.5 text-sm">
-              {preview.devoirs.map((d) => (
+              {preview.devoirs.map((d, dIdx) => (
                 <li
-                  key={d.matiere + d.date_rendu + d.description}
+                  key={`devoir-${dIdx}-${d.date_rendu}-${d.matiere}`}
                   className="flex items-start gap-2 py-1.5 px-2 rounded-lg bg-amber-500/10 border border-amber-500/20"
                 >
                   <FileText className="h-4 w-4 text-amber-500 mt-0.5 shrink-0" />
@@ -412,9 +412,9 @@ function TomorrowSection({
                   </div>
                 </li>
               ))}
-              {preview.controles.map((c) => (
+              {preview.controles.map((c, cIdx) => (
                 <li
-                  key={c.id}
+                  key={c.id || `controle-${cIdx}`}
                   className="flex items-start gap-2 py-1.5 px-2 rounded-lg bg-red-500/10 border border-red-500/20"
                 >
                   <Target className="h-4 w-4 text-red-500 mt-0.5 shrink-0" />
@@ -561,13 +561,13 @@ export function FocusTonight({
       {(plan.warnings.length > 0 || plan.recommendations.length > 0) && (
         <div className="grid gap-3 sm:grid-cols-2">
           {plan.warnings.map((warning, i) => (
-            <div key={i} className="flex items-start gap-2 p-3 rounded-xl bg-red-500/10 border border-red-500/20">
+            <div key={`warning-${i}`} className="flex items-start gap-2 p-3 rounded-xl bg-red-500/10 border border-red-500/20">
               <AlertTriangle className="h-4 w-4 text-red-500 mt-0.5 shrink-0" />
               <p className="text-sm text-red-600">{warning}</p>
             </div>
           ))}
           {plan.recommendations.map((rec, i) => (
-            <div key={i} className="flex items-start gap-2 p-3 rounded-xl bg-blue-500/10 border border-blue-500/20">
+            <div key={`rec-${i}`} className="flex items-start gap-2 p-3 rounded-xl bg-blue-500/10 border border-blue-500/20">
               <TrendingUp className="h-4 w-4 text-blue-500 mt-0.5 shrink-0" />
               <p className="text-sm text-blue-600">{rec}</p>
             </div>

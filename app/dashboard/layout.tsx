@@ -53,7 +53,7 @@ export default function DashboardLayout({
     try {
       // D'abord charger le cache
       const cached = await getCachedData()
-      console.log("[Dashboard] Cache response:", cached)
+      if (process.env.NODE_ENV === 'development') console.log("[Dashboard] Cache response:", cached)
       
       if (cached.data) {
         setData(cached.data)
@@ -65,7 +65,7 @@ export default function DashboardLayout({
       // Puis actualiser en arriere-plan
       setRefreshing(true)
       const fresh = await refreshData()
-      console.log("[Dashboard] Refresh response:", fresh)
+      if (process.env.NODE_ENV === 'development') console.log("[Dashboard] Refresh response:", fresh)
       
       // Priorite aux donnees, meme si erreur presente
       if (fresh.data) {
@@ -84,7 +84,7 @@ export default function DashboardLayout({
         }
       }
     } catch (err) {
-      console.error("Erreur chargement donnees:", err)
+      if (process.env.NODE_ENV === 'development') console.error("Erreur chargement donnees:", err)
       if (!hasData) {
         setError("Erreur de chargement des données")
       }
@@ -99,7 +99,7 @@ export default function DashboardLayout({
     setRefreshing(true)
     try {
       const fresh = await refreshData()
-      console.log("[Dashboard] Manual refresh response:", fresh)
+      if (process.env.NODE_ENV === 'development') console.log("[Dashboard] Manual refresh response:", fresh)
       
       // Priorite aux donnees
       if (fresh.data) {
@@ -115,7 +115,7 @@ export default function DashboardLayout({
         }
       }
     } catch (err) {
-      console.error("Erreur refresh:", err)
+      if (process.env.NODE_ENV === 'development') console.error("Erreur refresh:", err)
       if (!data) {
         setError("Erreur lors du rafraîchissement")
       }

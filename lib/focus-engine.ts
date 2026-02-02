@@ -107,7 +107,7 @@ export function isPastDue(dateString: string): boolean {
  * Génère un ID unique
  */
 function generateId(): string {
-  return `focus-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+  return `focus-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`
 }
 
 /**

@@ -416,8 +416,8 @@ export function GradeSimulator({ notes, moyennes }: GradeSimulatorProps) {
               </div>
             ) : (
               <div className="space-y-3">
-                {prioritySubjects.slice(0, 4).map(analysis => (
-                  <SubjectCard key={analysis.matiere} analysis={analysis} />
+                {prioritySubjects.slice(0, 4).map((analysis, idx) => (
+                  <SubjectCard key={`priority-${idx}-${analysis.matiere}`} analysis={analysis} />
                 ))}
               </div>
             )}
@@ -437,8 +437,8 @@ export function GradeSimulator({ notes, moyennes }: GradeSimulatorProps) {
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {Array.from(analyses.values())
               .sort((a, b) => (b.moyenneEleve || 0) - (a.moyenneEleve || 0))
-              .map(analysis => (
-                <SubjectCard key={analysis.matiere} analysis={analysis} />
+              .map((analysis, idx) => (
+                <SubjectCard key={`subject-${idx}-${analysis.matiere}`} analysis={analysis} />
               ))
             }
           </div>

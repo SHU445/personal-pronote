@@ -2,8 +2,9 @@ import type { PronoteData, AuthStatus, ApiResponse } from '@/types/pronote'
 
 const API_BASE = '/api'
 
-// Helper pour les logs client
+// Helper pour les logs client (dev uniquement)
 function logClient(context: string, message: string, data?: unknown) {
+  if (process.env.NODE_ENV !== 'development') return
   const timestamp = new Date().toISOString()
   console.log(`[${timestamp}] [API Client] [${context}] ${message}`, data !== undefined ? data : '')
 }
