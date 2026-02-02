@@ -20,9 +20,17 @@ if sys.platform == "win32":
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
     sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
 
-# Fichier de credentials pour la connexion persistante
+# Fichier de credentials pour la connexion persistante (fallback si pas de Neon)
 CREDENTIALS_FILE = Path(__file__).parent / "credentials.json"
 DATA_FILE = Path(__file__).parent / "data.json"
+
+# Neon: utiliser db.py si DATABASE_URL est défini
+def _use_db():
+    try:
+        from db import use_database
+        return use_database()
+    except Exception:
+        return False
 
 
 def log(message: str, data=None):
@@ -161,6 +169,30 @@ class PronoteClient:
         """
         log("=== CHECK CREDENTIALS EXIST ===")
         
+        if _use_db():
+            try:
+                from db import get_credentials
+                creds = get_credentials()
+                if not creds:
+                    log("Aucun credentials en base (Neon)")
+                    return {"connected": False, "error": "Aucun token sauvegarde"}
+                log("Credentials lus (Neon)", {
+                    "url": (creds.get("url") or "")[:50] + "...",
+                    "username": creds.get("username"),
+                    "has_password": bool(creds.get("password")),
+                    "has_uuid": bool(creds.get("uuid"))
+                })
+                required = ["url", "username", "password", "uuid"]
+                for field in required:
+                    if not creds.get(field):
+                        log(f"Champ manquant: {field}")
+                        return {"connected": False, "error": f"Champ manquant: {field}"}
+                log("Credentials valides")
+                return {"connected": True, "credentials_exist": True}
+            except Exception as e:
+                log(f"Erreur lecture credentials (Neon): {e}")
+                return {"connected": False, "error": str(e)}
+        
         if not CREDENTIALS_FILE.exists():
             log("Fichier credentials.json non trouvé")
             return {"connected": False, "error": "Aucun token sauvegarde"}
@@ -177,7 +209,6 @@ class PronoteClient:
                 "has_uuid": bool(creds.get("uuid"))
             })
             
-            # Verifier que les champs requis sont presents
             required = ["url", "username", "password", "uuid"]
             for field in required:
                 if not creds.get(field):
@@ -197,14 +228,27 @@ class PronoteClient:
         """
         log("=== CONNECT WITH TOKEN ===")
         
-        if not CREDENTIALS_FILE.exists():
-            log("Fichier credentials.json non trouvé")
+        creds = None
+        if _use_db():
+            try:
+                from db import get_credentials
+                creds = get_credentials()
+            except Exception as e:
+                log(f"Erreur lecture credentials Neon: {e}")
+                return {"connected": False, "error": str(e)}
+        elif CREDENTIALS_FILE.exists():
+            try:
+                with open(CREDENTIALS_FILE, "r", encoding="utf-8") as f:
+                    creds = json.load(f)
+            except Exception as e:
+                log(f"Erreur lecture credentials: {e}")
+                return {"connected": False, "error": str(e)}
+        
+        if not creds:
+            log("Aucun credentials (fichier ou Neon)")
             return {"connected": False, "error": "Aucun token sauvegarde"}
         
         try:
-            with open(CREDENTIALS_FILE, "r", encoding="utf-8") as f:
-                creds = json.load(f)
-            
             original_url = creds["url"]
             log("Credentials chargés", {
                 "url_original": original_url[:100] + "..." if len(original_url) > 100 else original_url,
@@ -244,16 +288,25 @@ class PronoteClient:
                 log(f"Nouveau password length: {len(self.client.password)}")
                 
                 # Sauvegarder les nouveaux credentials pour la prochaine fois
-                new_creds = {
-                    "url": creds["url"],
-                    "username": self.client.username,
-                    "password": self.client.password,
-                    "uuid": creds["uuid"]
-                }
-                with open(CREDENTIALS_FILE, "w", encoding="utf-8") as f:
-                    json.dump(new_creds, f, indent=2)
-                
-                log("Credentials sauvegardés")
+                if _use_db():
+                    from db import set_credentials
+                    set_credentials(
+                        creds["url"],
+                        self.client.username,
+                        self.client.password,
+                        creds["uuid"]
+                    )
+                    log("Credentials sauvegardés (Neon)")
+                else:
+                    new_creds = {
+                        "url": creds["url"],
+                        "username": self.client.username,
+                        "password": self.client.password,
+                        "uuid": creds["uuid"]
+                    }
+                    with open(CREDENTIALS_FILE, "w", encoding="utf-8") as f:
+                        json.dump(new_creds, f, indent=2)
+                    log("Credentials sauvegardés")
                 eleve_info = self.get_info_eleve()
                 log("Info élève récupérées", eleve_info)
                 
@@ -349,19 +402,24 @@ class PronoteClient:
                 }
                 
                 log("Sauvegarde des credentials...")
-                with open(CREDENTIALS_FILE, "w", encoding="utf-8") as f:
-                    json.dump(creds, f, indent=2)
-                log("Credentials sauvegardés avec succès")
-                
-                # Vérifier que le fichier a bien été créé
-                if CREDENTIALS_FILE.exists():
-                    with open(CREDENTIALS_FILE, "r", encoding="utf-8") as f:
-                        saved_creds = json.load(f)
-                    log("Vérification credentials sauvegardés", {
-                        "url": saved_creds.get("url", "")[:50] + "...",
-                        "username": saved_creds.get("username"),
-                        "password_length": len(saved_creds.get("password", ""))
-                    })
+                if _use_db():
+                    from db import set_credentials
+                    set_credentials(
+                        final_url, self.client.username, self.client.password, device_uuid
+                    )
+                    log("Credentials sauvegardés avec succès (Neon)")
+                else:
+                    with open(CREDENTIALS_FILE, "w", encoding="utf-8") as f:
+                        json.dump(creds, f, indent=2)
+                    log("Credentials sauvegardés avec succès")
+                    if CREDENTIALS_FILE.exists():
+                        with open(CREDENTIALS_FILE, "r", encoding="utf-8") as f:
+                            saved_creds = json.load(f)
+                        log("Vérification credentials sauvegardés", {
+                            "url": saved_creds.get("url", "")[:50] + "...",
+                            "username": saved_creds.get("username"),
+                            "password_length": len(saved_creds.get("password", ""))
+                        })
                 
                 # Recuperer les donnees immediatement apres la connexion
                 # car token_login peut echouer plus tard
@@ -395,7 +453,10 @@ class PronoteClient:
     def logout(self) -> dict:
         """Deconnexion et suppression des credentials"""
         try:
-            if CREDENTIALS_FILE.exists():
+            if _use_db():
+                from db import delete_credentials
+                delete_credentials()
+            elif CREDENTIALS_FILE.exists():
                 CREDENTIALS_FILE.unlink()
             self.client = None
             self.connected = False
@@ -661,9 +722,13 @@ class PronoteClient:
             "retards": [r.to_dict() for r in retards]
         }
         
-        # Sauvegarder localement
-        with open(DATA_FILE, "w", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
+        # Sauvegarder (Neon ou fichier)
+        if _use_db():
+            from db import set_cache
+            set_cache(data)
+        else:
+            with open(DATA_FILE, "w", encoding="utf-8") as f:
+                json.dump(data, f, ensure_ascii=False, indent=2)
         
         return data
     

@@ -3,6 +3,7 @@ import { exec } from 'child_process'
 import { promisify } from 'util'
 import path from 'path'
 import { promises as fs } from 'fs'
+import { getPronoteCache, useNeon } from '@/lib/db'
 
 const execAsync = promisify(exec)
 
@@ -17,14 +18,40 @@ function logError(message: string, error?: unknown) {
   console.error(`[${timestamp}] [Pronote Data] ERROR: ${message}`, error)
 }
 
-// GET: Lire les donnees en cache
+// GET: Lire les donnees en cache (Neon ou fichier)
 export async function GET() {
   log('=== GET CACHE DATA ===')
-  
+
   try {
+    if (useNeon()) {
+      const row = await getPronoteCache()
+      if (row?.data) {
+        const data = row.data as Record<string, unknown>
+        log('Cache trouvé (Neon):', {
+          export_date: data.export_date,
+          eleve: (data.eleve as { nom?: string })?.nom,
+          notes_count: Array.isArray(data.notes) ? data.notes.length : 0,
+          devoirs_count: Array.isArray(data.devoirs) ? data.devoirs.length : 0
+        })
+        log('=== FIN GET CACHE - Succès ===')
+        return NextResponse.json({
+          success: true,
+          data,
+          cached: true
+        })
+      }
+      log('Pas de cache Neon')
+      log('=== FIN GET CACHE - Pas de cache ===')
+      return NextResponse.json({
+        success: false,
+        error: 'Aucune donnee en cache',
+        cached: false
+      })
+    }
+
     const dataFile = path.join(process.cwd(), 'backend', 'data.json')
     log('Lecture fichier:', dataFile)
-    
+
     try {
       const content = await fs.readFile(dataFile, 'utf-8')
       const data = JSON.parse(content)
@@ -49,7 +76,6 @@ export async function GET() {
         cached: false
       })
     }
-    
   } catch (error) {
     logError('Exception:', error)
     log('=== FIN GET CACHE - ERREUR ===')
@@ -68,27 +94,31 @@ export async function POST() {
     const backendDir = path.join(process.cwd(), 'backend')
     const pythonScript = path.join(backendDir, 'pronote_client.py')
     
-    // Vérifier credentials avant d'appeler
-    const credsPath = path.join(backendDir, 'credentials.json')
-    try {
-      const creds = await fs.readFile(credsPath, 'utf-8')
-      const credsData = JSON.parse(creds)
-      log('Credentials disponibles:', { 
-        url: credsData.url?.substring(0, 50) + '...', 
-        username: credsData.username,
-        hasPassword: !!credsData.password,
-        passwordLength: credsData.password?.length || 0,
-        hasUuid: !!credsData.uuid
-      })
-    } catch {
-      logError('Aucun credentials.json - connexion impossible')
-      return NextResponse.json({
-        success: false,
-        error: 'Non connecté - aucun token sauvegardé',
-        tokenExpired: true
-      })
+    // Vérifier credentials avant d'appeler (fichier uniquement ; si Neon, Python vérifiera)
+    if (!useNeon()) {
+      const credsPath = path.join(backendDir, 'credentials.json')
+      try {
+        const creds = await fs.readFile(credsPath, 'utf-8')
+        const credsData = JSON.parse(creds)
+        log('Credentials disponibles:', {
+          url: credsData.url?.substring(0, 50) + '...',
+          username: credsData.username,
+          hasPassword: !!credsData.password,
+          passwordLength: credsData.password?.length || 0,
+          hasUuid: !!credsData.uuid
+        })
+      } catch {
+        logError('Aucun credentials.json - connexion impossible')
+        return NextResponse.json({
+          success: false,
+          error: 'Non connecté - aucun token sauvegardé',
+          tokenExpired: true
+        })
+      }
+    } else {
+      log('Neon actif - vérification credentials côté Python')
     }
-    
+
     const command = `python "${pythonScript}" data`
     log('Exécution:', command)
     
@@ -157,21 +187,30 @@ export async function POST() {
     // Gerer les erreurs de connexion (token expire, etc.)
     if (data.error) {
       log('Erreur détectée dans la réponse:', data.error)
-      
-      // Essayer de retourner le cache avec l'erreur
+
+      // Essayer de retourner le cache avec l'erreur (Neon ou fichier)
       try {
-        const dataFile = path.join(process.cwd(), 'backend', 'data.json')
-        const content = await fs.readFile(dataFile, 'utf-8')
-        const cachedData = JSON.parse(content)
-        log('Retour du cache avec erreur')
-        log('=== FIN REFRESH - Cache + Erreur ===')
-        return NextResponse.json({
-          success: true,
-          data: cachedData,
-          cached: true,
-          error: data.error,
-          tokenExpired: data.details?.token_expired || data.error.includes('expire')
-        })
+        let cachedData: Record<string, unknown>
+        if (useNeon()) {
+          const row = await getPronoteCache()
+          cachedData = (row?.data as Record<string, unknown>) ?? {}
+        } else {
+          const dataFile = path.join(process.cwd(), 'backend', 'data.json')
+          const content = await fs.readFile(dataFile, 'utf-8')
+          cachedData = JSON.parse(content)
+        }
+        if (Object.keys(cachedData).length > 0) {
+          log('Retour du cache avec erreur')
+          log('=== FIN REFRESH - Cache + Erreur ===')
+          return NextResponse.json({
+            success: true,
+            data: cachedData,
+            cached: true,
+            error: data.error,
+            tokenExpired: data.details?.token_expired || data.error.includes('expire')
+          })
+        }
+        throw new Error('Cache vide')
       } catch {
         log('Pas de cache, retour erreur seule')
         log('=== FIN REFRESH - Erreur sans cache ===')
@@ -198,20 +237,29 @@ export async function POST() {
     
   } catch (error) {
     logError('Exception globale:', error)
-    
-    // En cas d'erreur, essayer de retourner le cache
+
+    // En cas d'erreur, essayer de retourner le cache (Neon ou fichier)
     try {
-      const dataFile = path.join(process.cwd(), 'backend', 'data.json')
-      const content = await fs.readFile(dataFile, 'utf-8')
-      const data = JSON.parse(content)
-      log('Retour cache après exception')
-      log('=== FIN REFRESH - Cache après exception ===')
-      return NextResponse.json({
-        success: true,
-        data,
-        cached: true,
-        refreshError: error instanceof Error ? error.message : 'Erreur'
-      })
+      let data: Record<string, unknown>
+      if (useNeon()) {
+        const row = await getPronoteCache()
+        data = (row?.data as Record<string, unknown>) ?? {}
+      } else {
+        const dataFile = path.join(process.cwd(), 'backend', 'data.json')
+        const content = await fs.readFile(dataFile, 'utf-8')
+        data = JSON.parse(content)
+      }
+      if (Object.keys(data).length > 0) {
+        log('Retour cache après exception')
+        log('=== FIN REFRESH - Cache après exception ===')
+        return NextResponse.json({
+          success: true,
+          data,
+          cached: true,
+          refreshError: error instanceof Error ? error.message : 'Erreur'
+        })
+      }
+      throw new Error('Cache vide')
     } catch {
       log('=== FIN REFRESH - ERREUR TOTALE ===')
       return NextResponse.json({

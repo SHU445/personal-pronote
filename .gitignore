@@ -46,5 +46,6 @@ Thumbs.db
 # Backend
 backend/credentials.json
 backend/data.json
+backend/temp_qr.json
 __pycache__/
 *.pyc
