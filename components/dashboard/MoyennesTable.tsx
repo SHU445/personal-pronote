@@ -29,7 +29,7 @@ export function MoyennesTable({ moyennes }: MoyennesTableProps) {
     return (
       <Card>
         <CardHeader>
-          <CardTitle>Moyennes par matiere</CardTitle>
+          <CardTitle>Moyennes par matière</CardTitle>
           <CardDescription>Aucune moyenne disponible</CardDescription>
         </CardHeader>
       </Card>
@@ -39,14 +39,14 @@ export function MoyennesTable({ moyennes }: MoyennesTableProps) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Moyennes par matiere</CardTitle>
-        <CardDescription>{moyennes.length} matiere(s)</CardDescription>
+        <CardTitle>Moyennes par matière</CardTitle>
+        <CardDescription>{moyennes.length} matière(s)</CardDescription>
       </CardHeader>
       <CardContent>
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Matiere</TableHead>
+              <TableHead>Matière</TableHead>
               <TableHead className="text-center">Ma moyenne</TableHead>
               <TableHead className="text-center hidden sm:table-cell">Classe</TableHead>
               <TableHead className="text-center hidden md:table-cell">Min</TableHead>
@@ -60,9 +60,9 @@ export function MoyennesTable({ moyennes }: MoyennesTableProps) {
               const progress = moyVal ? (moyVal / 20) * 100 : 0
 
               return (
-                <TableRow key={index}>
+                <TableRow key={`moy-${(moyenne.matiere || "").slice(0, 30)}-${index}`}>
                   <TableCell className="font-medium">
-                    {moyenne.matiere.split(" > ")[0]}
+                    {(moyenne.matiere || "—").split(" > ")[0]}
                   </TableCell>
                   <TableCell className="text-center">
                     <span

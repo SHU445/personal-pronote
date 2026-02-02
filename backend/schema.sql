@@ -11,9 +11,9 @@ CREATE TABLE IF NOT EXISTS pronote_credentials (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- Cache des données Pronote (une seule ligne)
+-- Cache des données Pronote : une ligne par semestre (id 1 = Semestre 1, id 2 = Semestre 2)
 CREATE TABLE IF NOT EXISTS pronote_cache (
-  id INTEGER PRIMARY KEY DEFAULT 1 CHECK (id = 1),
+  id INTEGER PRIMARY KEY CHECK (id IN (1, 2)),
   data JSONB NOT NULL DEFAULT '{}',
   export_date TIMESTAMPTZ,
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()

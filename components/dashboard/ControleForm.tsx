@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Textarea } from "@/components/ui/textarea"
-import { cn } from "@/lib/utils"
+import { cn, htmlToPlainText } from "@/lib/utils"
 import type { Controle } from "@/types/pronote"
 import { addControle, deleteControle, getUpcomingControles } from "@/lib/user-config"
 import { getDaysUntil } from "@/lib/focus-engine"
@@ -183,7 +183,7 @@ function ControleCard({
 
         {controle.description && (
           <p className="text-sm text-muted-foreground mb-2 line-clamp-2">
-            {controle.description}
+            {htmlToPlainText(controle.description)}
           </p>
         )}
 

@@ -1,13 +1,15 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useContext } from "react"
 import { useRouter } from "next/navigation"
 import { RefreshCw, Menu, User, Clock } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { ThemeToggle } from "@/components/ThemeToggle"
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
 import { MobileNav } from "./MobileNav"
+import { DataContext } from "@/app/dashboard/layout"
 import type { Eleve } from "@/types/pronote"
+import type { Semestre } from "@/lib/api"
 import { cn } from "@/lib/utils"
 
 interface HeaderProps {
@@ -20,6 +22,7 @@ interface HeaderProps {
 export function Header({ eleve, onRefresh, refreshing, lastRefresh }: HeaderProps) {
   const [mobileOpen, setMobileOpen] = useState(false)
   const router = useRouter()
+  const { semestre, setSemestre } = useContext(DataContext)
 
   const formatLastRefresh = () => {
     if (!lastRefresh) return null
@@ -48,8 +51,8 @@ export function Header({ eleve, onRefresh, refreshing, lastRefresh }: HeaderProp
           </SheetContent>
         </Sheet>
 
-        {/* User info */}
-        <div className="flex-1">
+        {/* User info + semestre */}
+        <div className="flex-1 flex items-center gap-3">
           {eleve && (
             <div className="flex items-center gap-3 animate-fade-in">
               <div className="hidden sm:flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-primary/20 to-primary/5 ring-1 ring-primary/10">
@@ -63,6 +66,25 @@ export function Header({ eleve, onRefresh, refreshing, lastRefresh }: HeaderProp
               </div>
             </div>
           )}
+          <div className="flex rounded-lg border border-border bg-muted/30 p-0.5" role="tablist" aria-label="Choisir le semestre">
+            {([1, 2] as Semestre[]).map((s) => (
+              <button
+                key={s}
+                type="button"
+                role="tab"
+                aria-selected={semestre === s}
+                onClick={() => setSemestre(s)}
+                className={cn(
+                  "px-3 py-1.5 text-sm font-medium rounded-md transition-colors",
+                  semestre === s
+                    ? "bg-background text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                S{s}
+              </button>
+            ))}
+          </div>
         </div>
 
         {/* Last refresh */}

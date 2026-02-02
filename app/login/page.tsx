@@ -124,7 +124,7 @@ function LoginContent() {
       <footer className="border-t bg-background/80 backdrop-blur-xl">
         <div className="container mx-auto px-4 py-4 text-center">
           <p className="text-sm text-muted-foreground">
-            Pronote Dashboard • Connexion sécurisée via <span className="font-medium text-foreground">pronotepy</span>
+            Pronote Dashboard • Connexion sécurisée via <span className="font-medium text-foreground">Pawnote</span>
           </p>
         </div>
       </footer>

@@ -16,15 +16,20 @@ export type PronoteCredentialsRow = {
   uuid: string
 }
 
+/** Semestre 1 ou 2 (id 1 = S1, id 2 = S2). */
+export type Semestre = 1 | 2
+
 /**
- * Récupère le cache Pronote depuis Neon (une seule ligne id=1).
+ * Récupère le cache Pronote depuis Neon pour un semestre donné.
+ * @param semestre 1 = Semestre 1, 2 = Semestre 2 (défaut: 1)
  */
-export async function getPronoteCache(): Promise<PronoteCacheRow | null> {
+export async function getPronoteCache(semestre: Semestre = 1): Promise<PronoteCacheRow | null> {
   const connectionString = process.env.DATABASE_URL
   if (!connectionString) return null
+  const id = semestre
   try {
     const sql = neon(connectionString)
-    const rows = await sql`SELECT data, export_date FROM pronote_cache WHERE id = 1 LIMIT 1`
+    const rows = await sql`SELECT data, export_date FROM pronote_cache WHERE id = ${id} LIMIT 1`
     if (!rows.length || !rows[0]) return null
     const row = rows[0] as { data: unknown; export_date: string | null }
     if (!row.data || (typeof row.data === 'object' && Object.keys(row.data as object).length === 0)) return null
@@ -35,16 +40,19 @@ export async function getPronoteCache(): Promise<PronoteCacheRow | null> {
 }
 
 /**
- * Enregistre le cache Pronote dans Neon (upsert).
+ * Enregistre le cache Pronote dans Neon pour un semestre donné (upsert).
+ * @param data Données à enregistrer
+ * @param semestre 1 = Semestre 1, 2 = Semestre 2 (défaut: 1)
  */
-export async function setPronoteCache(data: Record<string, unknown>): Promise<void> {
+export async function setPronoteCache(data: Record<string, unknown>, semestre: Semestre = 1): Promise<void> {
   const connectionString = process.env.DATABASE_URL
   if (!connectionString) throw new Error('DATABASE_URL non défini')
   const sql = neon(connectionString)
+  const id = semestre
   const exportDate = (data.export_date as string) || new Date().toISOString()
   await sql`
     INSERT INTO pronote_cache (id, data, export_date, updated_at)
-    VALUES (1, ${JSON.stringify(data)}::jsonb, ${exportDate}::timestamptz, NOW())
+    VALUES (${id}, ${JSON.stringify(data)}::jsonb, ${exportDate}::timestamptz, NOW())
     ON CONFLICT (id) DO UPDATE SET
       data = EXCLUDED.data,
       export_date = EXCLUDED.export_date,

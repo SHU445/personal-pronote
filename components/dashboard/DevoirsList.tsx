@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import type { Devoir } from "@/types/pronote"
-import { formatDate } from "@/lib/utils"
+import { formatDate, htmlToPlainText } from "@/lib/utils"
 
 interface DevoirsListProps {
   devoirs: Devoir[]
@@ -176,7 +176,7 @@ export function DevoirsList({ devoirs }: DevoirsListProps) {
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 flex-wrap mb-1">
                             <span className="font-medium">
-                              {devoir.matiere.split(" > ")[0]}
+                              {(devoir.matiere || "—").split(" > ")[0]}
                             </span>
                             {devoir.fait && (
                               <Badge variant="success" className="text-xs">
@@ -190,7 +190,7 @@ export function DevoirsList({ devoirs }: DevoirsListProps) {
                             )}
                           </div>
                           <p className="text-sm text-muted-foreground whitespace-pre-wrap">
-                            {devoir.description}
+                            {htmlToPlainText(devoir.description)}
                           </p>
                           {devoir.fichiers && devoir.fichiers.length > 0 && (
                             <div className="flex flex-wrap gap-2 mt-2">

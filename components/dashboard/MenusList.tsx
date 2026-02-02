@@ -11,15 +11,16 @@ interface MenusListProps {
 }
 
 export function MenusList({ menus }: MenusListProps) {
-  // Trier par date
-  const sortedMenus = [...menus].sort(
+  // Filtrer les entrées avec date valide, puis trier par date
+  const withValidDate = menus.filter((m) => m.date && !Number.isNaN(new Date(m.date).getTime()))
+  const sortedMenus = [...withValidDate].sort(
     (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
   )
 
   // Filtrer les menus futurs uniquement
-  const upcomingMenus = sortedMenus.filter(
-    (m) => new Date(m.date) >= new Date(new Date().setHours(0, 0, 0, 0))
-  )
+  const todayStart = new Date()
+  todayStart.setHours(0, 0, 0, 0)
+  const upcomingMenus = sortedMenus.filter((m) => new Date(m.date) >= todayStart)
 
   if (upcomingMenus.length === 0) {
     return (

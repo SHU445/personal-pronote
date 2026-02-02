@@ -22,7 +22,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
-import { cn } from "@/lib/utils"
+import { cn, htmlToPlainText } from "@/lib/utils"
 import type { Devoir, Note, Moyenne, Lesson, Controle, FocusTask, FocusPlan, TaskCategory } from "@/types/pronote"
 import { generateFocusPlan, getTomorrowPreview, DEFAULT_CONFIG } from "@/lib/focus-engine"
 import { loadConfig, loadControles, markTaskCompleted, isTaskCompletedToday } from "@/lib/user-config"
@@ -176,7 +176,7 @@ function FocusTaskCard({
 
         {/* Description (tronquée) */}
         <p className="text-xs text-muted-foreground line-clamp-2 mb-2">
-          {task.description}
+          {htmlToPlainText(task.description)}
         </p>
 
         {/* Footer: Justification simplifiée + Temps */}
@@ -381,7 +381,7 @@ function TomorrowSection({
                     key={l.id ? String(l.id) : `lesson-${index}-${l.matiere}-${l.debut ?? ""}-${l.fin ?? ""}`}
                     className="flex items-center justify-between py-1.5 px-2 rounded-lg bg-muted/50"
                   >
-                    <span className="font-medium">{l.matiere}</span>
+                    <span className="font-medium">{l.matiere || "—"}</span>
                     <span className="text-muted-foreground text-xs">
                       {start}
                       {end ? ` – ${end}` : ""}
@@ -407,8 +407,8 @@ function TomorrowSection({
                 >
                   <FileText className="h-4 w-4 text-amber-500 mt-0.5 shrink-0" />
                   <div>
-                    <span className="font-medium">{d.matiere}</span>
-                    <p className="text-muted-foreground line-clamp-1">{d.description}</p>
+                    <span className="font-medium">{d.matiere || "—"}</span>
+                    <p className="text-muted-foreground line-clamp-1">{htmlToPlainText(d.description || "")}</p>
                   </div>
                 </li>
               ))}
@@ -419,9 +419,9 @@ function TomorrowSection({
                 >
                   <Target className="h-4 w-4 text-red-500 mt-0.5 shrink-0" />
                   <div>
-                    <span className="font-medium">{c.matiere}</span>
+                    <span className="font-medium">{c.matiere || "—"}</span>
                     <p className="text-muted-foreground text-xs">
-                      {c.type.toUpperCase()} • {c.dureeRevision ?? 45}min révision
+                      {(c.type || "ds").toUpperCase()} • {c.dureeRevision ?? 45}min révision
                     </p>
                   </div>
                 </li>

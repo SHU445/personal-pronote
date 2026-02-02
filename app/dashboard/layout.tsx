@@ -1,22 +1,24 @@
 "use client"
 
-import { useEffect, useState, useCallback } from "react"
+import { useEffect, useState, useCallback, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { RefreshCw, AlertTriangle } from "lucide-react"
 import { Sidebar } from "@/components/layout/Sidebar"
 import { Header } from "@/components/layout/Header"
-import { checkAuthStatus, getCachedData, refreshData, logout } from "@/lib/api"
+import { checkAuthStatus, getCachedData, refreshData, logout, type Semestre } from "@/lib/api"
 import type { PronoteData } from "@/types/pronote"
 import { Button } from "@/components/ui/button"
 import React from "react"
 
-// Context pour partager les donnees
+// Context pour partager les donnees et le semestre
 export const DataContext = React.createContext<{
   data: PronoteData | null
   loading: boolean
   refreshing: boolean
   lastRefresh: string | null
   error: string | null
+  semestre: Semestre
+  setSemestre: (s: Semestre) => void
   refresh: () => Promise<void>
 }>({
   data: null,
@@ -24,6 +26,8 @@ export const DataContext = React.createContext<{
   refreshing: false,
   lastRefresh: null,
   error: null,
+  semestre: 1,
+  setSemestre: () => {},
   refresh: async () => {},
 })
 
@@ -33,12 +37,14 @@ export default function DashboardLayout({
   children: React.ReactNode
 }) {
   const router = useRouter()
+  const authVerifiedRef = useRef(false)
   const [checking, setChecking] = useState(true)
   const [data, setData] = useState<PronoteData | null>(null)
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [lastRefresh, setLastRefresh] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [semestre, setSemestre] = useState<Semestre>(1)
 
   // Gerer la reconnexion
   const handleReconnect = async () => {
@@ -46,13 +52,13 @@ export default function DashboardLayout({
     router.replace("/login?expired=true")
   }
 
-  // Charger les donnees
-  const loadData = useCallback(async () => {
+  // Charger les donnees pour un semestre donne (initial: 1)
+  const loadData = useCallback(async (s: Semestre) => {
     let hasData = false
     
     try {
       // D'abord charger le cache
-      const cached = await getCachedData()
+      const cached = await getCachedData(s)
       if (process.env.NODE_ENV === 'development') console.log("[Dashboard] Cache response:", cached)
       
       if (cached.data) {
@@ -64,7 +70,7 @@ export default function DashboardLayout({
 
       // Puis actualiser en arriere-plan
       setRefreshing(true)
-      const fresh = await refreshData()
+      const fresh = await refreshData(s)
       if (process.env.NODE_ENV === 'development') console.log("[Dashboard] Refresh response:", fresh)
       
       // Priorite aux donnees, meme si erreur presente
@@ -98,7 +104,7 @@ export default function DashboardLayout({
   const handleRefresh = useCallback(async () => {
     setRefreshing(true)
     try {
-      const fresh = await refreshData()
+      const fresh = await refreshData(semestre)
       if (process.env.NODE_ENV === 'development') console.log("[Dashboard] Manual refresh response:", fresh)
       
       // Priorite aux donnees
@@ -122,25 +128,42 @@ export default function DashboardLayout({
     } finally {
       setRefreshing(false)
     }
-  }, [data])
+  }, [data, semestre])
 
-  // Verifier l'authentification au chargement
+  // Changer de semestre et recharger les donnees du cache (hook avant tout return)
+  const handleSetSemestre = useCallback((s: Semestre) => {
+    if (s === semestre) return
+    setSemestre(s)
+    setLoading(true)
+    getCachedData(s).then((res) => {
+      if (res.data) setData(res.data)
+      setLoading(false)
+    }).catch(() => setLoading(false))
+  }, [semestre])
+
+  // Verifier l'authentification au chargement (une seule redirection, ignorer réponses obsolètes)
   useEffect(() => {
+    let cancelled = false
     const checkAuth = async () => {
       try {
         const status = await checkAuthStatus()
+        if (cancelled || authVerifiedRef.current) return
         if (!status.connected) {
           router.replace("/login")
           return
         }
+        authVerifiedRef.current = true
         setChecking(false)
-        loadData()
+        loadData(1)
       } catch {
-        router.replace("/login")
+        if (!cancelled && !authVerifiedRef.current) {
+          router.replace("/login")
+        }
       }
     }
 
     checkAuth()
+    return () => { cancelled = true }
   }, [router, loadData])
 
   if (checking) {
@@ -160,7 +183,7 @@ export default function DashboardLayout({
   }
 
   return (
-    <DataContext.Provider value={{ data, loading, refreshing, lastRefresh, error, refresh: handleRefresh }}>
+    <DataContext.Provider value={{ data, loading, refreshing, lastRefresh, error, semestre, setSemestre: handleSetSemestre, refresh: handleRefresh }}>
       <div className="min-h-screen bg-gradient-to-br from-background via-background to-primary/5">
         {/* Sidebar */}
         <Sidebar />

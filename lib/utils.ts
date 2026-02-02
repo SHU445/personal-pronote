@@ -6,6 +6,18 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
+/**
+ * Convertit du HTML (ex. description Pronote) en texte brut pour affichage sûr.
+ * Évite d'afficher les balises brutes et tout risque XSS.
+ */
+export function htmlToPlainText(html: string): string {
+  if (!html || typeof html !== "string") return ""
+  return html
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+}
+
 export function formatDate(dateString: string): string {
   if (!dateString) return ""
   try {
@@ -68,6 +80,7 @@ export function formatDateLocal(date: Date): string {
 
 // Extraire la date YYYY-MM-DD d'une chaîne datetime
 export function extractDateFromDatetime(datetime: string): string {
+  if (!datetime || typeof datetime !== "string") return ""
   return datetime.split("T")[0]
 }
 

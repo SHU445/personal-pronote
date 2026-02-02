@@ -77,7 +77,7 @@ export function RecentNotes({ notes }: RecentNotesProps) {
             
             return (
               <div
-                key={index}
+                key={`note-${note.date}-${(note.matiere || "").slice(0, 30)}-${index}`}
                 className={cn(
                   "group flex items-center justify-between p-3 rounded-xl border transition-all duration-300",
                   "hover:shadow-md hover:-translate-y-0.5",
@@ -102,7 +102,7 @@ export function RecentNotes({ notes }: RecentNotesProps) {
                   </div>
                   <div className="min-w-0">
                     <p className="font-medium text-sm truncate">
-                      {note.matiere.split(" > ")[0]}
+                      {(note.matiere || "—").split(" > ")[0]}
                     </p>
                     <p className="text-xs text-muted-foreground truncate">
                       {formatDate(note.date)}

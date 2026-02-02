@@ -105,6 +105,10 @@ export interface ApiResponse<T> {
   data?: T
   error?: string
   refreshedAt?: string
+  /** Indique que le token Pronote a expiré (session à renouveler). */
+  tokenExpired?: boolean
+  /** Indique que les données viennent du cache. */
+  cached?: boolean
 }
 
 // ==========================================

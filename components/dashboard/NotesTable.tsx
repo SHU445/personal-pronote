@@ -57,12 +57,12 @@ export function NotesTable({ notes }: NotesTableProps) {
               const baremeVal = parseNote(note.bareme) || 20
 
               return (
-                <TableRow key={index}>
+                <TableRow key={`note-${note.date}-${(note.matiere || "").slice(0, 20)}-${index}`}>
                   <TableCell className="text-muted-foreground">
                     {formatDate(note.date)}
                   </TableCell>
                   <TableCell className="font-medium">
-                    {note.matiere.split(" > ")[0]}
+                    {(note.matiere || "—").split(" > ")[0]}
                   </TableCell>
                   <TableCell className="text-center">
                     <span

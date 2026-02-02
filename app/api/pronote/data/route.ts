@@ -3,7 +3,7 @@ import { exec } from 'child_process'
 import { promisify } from 'util'
 import path from 'path'
 import { promises as fs } from 'fs'
-import { getPronoteCache, useNeon } from '@/lib/db'
+import { getPronoteCache, useNeon, type Semestre } from '@/lib/db'
 import { fetchAllPronoteData } from '@/lib/pronote'
 
 const execAsync = promisify(exec)
@@ -19,13 +19,20 @@ function logError(message: string, error?: unknown) {
   console.error(`[${timestamp}] [Pronote Data] ERROR: ${message}`, error)
 }
 
-// GET: Lire les donnees en cache (Neon ou fichier)
-export async function GET() {
+function parseSemestre(searchParams: URLSearchParams): Semestre {
+  const s = searchParams.get('semestre')
+  if (s === '2') return 2
+  return 1
+}
+
+// GET: Lire les donnees en cache (Neon ou fichier) pour le semestre demandé
+export async function GET(request: Request) {
   log('=== GET CACHE DATA ===')
+  const semestre = parseSemestre(new URL(request.url).searchParams)
 
   try {
     if (useNeon()) {
-      const row = await getPronoteCache()
+      const row = await getPronoteCache(semestre)
       if (row?.data) {
         const data = row.data as Record<string, unknown>
         log('Cache trouvé (Neon):', {
@@ -87,16 +94,17 @@ export async function GET() {
   }
 }
 
-// POST: Actualiser les donnees depuis Pronote (Pawnote si Neon, sinon Python)
-export async function POST() {
+// POST: Actualiser les donnees depuis Pronote (Pawnote si Neon, sinon Python). Remplit S1 et S2, retourne le semestre demandé.
+export async function POST(request: Request) {
   log('=== POST REFRESH DATA ===')
+  const semestre = parseSemestre(new URL(request.url).searchParams)
 
   if (useNeon()) {
     try {
       const result = await fetchAllPronoteData()
       if ('error' in result) {
         log('Neon refresh erreur:', result.error)
-        const row = await getPronoteCache()
+        const row = await getPronoteCache(semestre)
         const cachedData = (row?.data as Record<string, unknown>) ?? {}
         if (Object.keys(cachedData).length > 0) {
           return NextResponse.json({
@@ -114,15 +122,18 @@ export async function POST() {
         })
       }
       log('Neon refresh succès:', { export_date: result.export_date, eleve: result.eleve?.nom })
+      const row = await getPronoteCache(semestre)
+      const dataToReturn = (row?.data as Record<string, unknown>) ?? result
       return NextResponse.json({
         success: true,
-        data: result,
+        data: dataToReturn,
         cached: false,
-        refreshedAt: new Date().toISOString()
+        refreshedAt: new Date().toISOString(),
+        semestre,
       })
     } catch (error) {
       logError('Neon exception:', error)
-      const row = await getPronoteCache()
+      const row = await getPronoteCache(semestre)
       const data = (row?.data as Record<string, unknown>) ?? {}
       if (Object.keys(data).length > 0) {
         return NextResponse.json({
@@ -235,7 +246,7 @@ export async function POST() {
       try {
         let cachedData: Record<string, unknown>
         if (useNeon()) {
-          const row = await getPronoteCache()
+          const row = await getPronoteCache(semestre)
           cachedData = (row?.data as Record<string, unknown>) ?? {}
         } else {
           const dataFile = path.join(process.cwd(), 'backend', 'data.json')
@@ -245,22 +256,26 @@ export async function POST() {
         if (Object.keys(cachedData).length > 0) {
           log('Retour du cache avec erreur')
           log('=== FIN REFRESH - Cache + Erreur ===')
+          const errMsg = typeof data.error === 'string' ? data.error : String(data.error ?? '')
+          const tokenExpired = (data.details as { token_expired?: boolean })?.token_expired ?? (typeof errMsg === 'string' && /expire|token/i.test(errMsg))
           return NextResponse.json({
             success: true,
             data: cachedData,
             cached: true,
-            error: data.error,
-            tokenExpired: data.details?.token_expired || data.error.includes('expire')
+            error: errMsg,
+            tokenExpired
           })
         }
         throw new Error('Cache vide')
       } catch {
         log('Pas de cache, retour erreur seule')
         log('=== FIN REFRESH - Erreur sans cache ===')
+        const errMsg = typeof data.error === 'string' ? data.error : String(data.error ?? '')
+        const tokenExpired = (data.details as { token_expired?: boolean })?.token_expired ?? (typeof errMsg === 'string' && /expire|token/i.test(errMsg))
         return NextResponse.json({
           success: false,
-          error: data.error,
-          tokenExpired: data.details?.token_expired || data.error.includes('expire')
+          error: errMsg,
+          tokenExpired
         })
       }
     }
@@ -285,7 +300,7 @@ export async function POST() {
     try {
       let data: Record<string, unknown>
       if (useNeon()) {
-        const row = await getPronoteCache()
+        const row = await getPronoteCache(semestre)
         data = (row?.data as Record<string, unknown>) ?? {}
       } else {
         const dataFile = path.join(process.cwd(), 'backend', 'data.json')

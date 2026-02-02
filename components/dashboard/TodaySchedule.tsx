@@ -13,15 +13,17 @@ interface TodayScheduleProps {
 }
 
 export function TodaySchedule({ lessons }: TodayScheduleProps) {
-  // Filtrer les cours d'aujourd'hui
+  // Filtrer les cours d'aujourd'hui (ignorer les entrées sans date valide)
   const todayStr = formatDateLocal(new Date())
 
   const todayLessons = lessons
-    .filter((l) => {
-      const lessonDate = extractDateFromDatetime(l.debut)
-      return lessonDate === todayStr
+    .filter((l) => l.debut && l.fin && extractDateFromDatetime(l.debut) === todayStr)
+    .sort((a, b) => {
+      const ta = new Date(a.debut).getTime()
+      const tb = new Date(b.debut).getTime()
+      if (Number.isNaN(ta) || Number.isNaN(tb)) return 0
+      return ta - tb
     })
-    .sort((a, b) => new Date(a.debut).getTime() - new Date(b.debut).getTime())
 
   // Vérifier si un cours est en cours
   const now = new Date()
@@ -81,12 +83,12 @@ export function TodaySchedule({ lessons }: TodayScheduleProps) {
         <div className="space-y-2">
           {todayLessons.map((lesson, index) => {
             const isCurrent = isCurrentLesson(lesson)
-            const colors = getSubjectColor(lesson.matiere)
-            const subjectName = lesson.matiere.split(" > ")[0]
+            const colors = getSubjectColor(lesson.matiere || "")
+            const subjectName = (lesson.matiere || "—").split(" > ")[0]
             
             return (
               <div
-                key={index}
+                key={lesson.id || `lesson-${lesson.debut}-${index}`}
                 className={cn(
                   "group flex items-start gap-3 p-3 rounded-xl border-l-4 transition-all duration-300",
                   "hover:shadow-md hover:-translate-y-0.5",

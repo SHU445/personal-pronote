@@ -47,8 +47,9 @@ function CourseCard({
   position: 'grid' | 'list'
   compact?: boolean
 }) {
-  const colors = getSubjectColor(lesson.matiere)
-  const subjectName = lesson.matiere.split(" > ")[0]
+  const matiereLabel = lesson.matiere || "—"
+  const colors = getSubjectColor(matiereLabel)
+  const subjectName = matiereLabel.split(" > ")[0]
   
   if (position === 'grid') {
     return (
@@ -276,10 +277,11 @@ export function Timetable({ lessons }: TimetableProps) {
     for (const day of currentWeek) {
       const dayStr = formatDateLocal(day)
       const dayLessons = lessons.filter((l) => {
+        if (!l.debut || !l.fin) return false
         const lessonDate = extractDateFromDatetime(l.debut)
         return lessonDate === dayStr
       })
-      
+
       grouped[dayStr] = calculateLessonPositions(dayLessons, GRID_START_HOUR, GRID_END_HOUR)
     }
 

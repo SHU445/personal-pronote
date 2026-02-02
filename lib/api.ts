@@ -13,7 +13,10 @@ function logClient(context: string, message: string, data?: unknown) {
 
 export async function checkAuthStatus(): Promise<AuthStatus> {
   logClient('checkAuthStatus', 'Début appel')
-  const response = await fetch(`${API_BASE}/auth/status`)
+  const response = await fetch(`${API_BASE}/auth/status`, {
+    cache: 'no-store',
+    headers: { 'Cache-Control': 'no-cache' },
+  })
   const result = await response.json()
   logClient('checkAuthStatus', 'Résultat:', result)
   return result
@@ -43,17 +46,20 @@ export async function logout(): Promise<{ success: boolean; error?: string }> {
 
 // === Data ===
 
-export async function getCachedData(): Promise<ApiResponse<PronoteData>> {
-  logClient('getCachedData', 'Début appel')
-  const response = await fetch(`${API_BASE}/pronote/data`)
+/** 1 = Semestre 1, 2 = Semestre 2 */
+export type Semestre = 1 | 2
+
+export async function getCachedData(semestre: Semestre = 1): Promise<ApiResponse<PronoteData>> {
+  logClient('getCachedData', 'Début appel', { semestre })
+  const response = await fetch(`${API_BASE}/pronote/data?semestre=${semestre}`)
   const result = await response.json()
   logClient('getCachedData', 'Résultat:', { success: result.success, cached: result.cached, hasData: !!result.data, error: result.error })
   return result
 }
 
-export async function refreshData(): Promise<ApiResponse<PronoteData>> {
-  logClient('refreshData', 'Début appel')
-  const response = await fetch(`${API_BASE}/pronote/data`, {
+export async function refreshData(semestre: Semestre = 1): Promise<ApiResponse<PronoteData>> {
+  logClient('refreshData', 'Début appel', { semestre })
+  const response = await fetch(`${API_BASE}/pronote/data?semestre=${semestre}`, {
     method: 'POST'
   })
   const result = await response.json()

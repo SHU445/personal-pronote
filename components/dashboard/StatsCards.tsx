@@ -32,7 +32,7 @@ export function StatsCards({ notes, moyennes, devoirs }: StatsCardsProps) {
     for (const m of moyennes) {
       const val = parseNote(m.moyenne_eleve)
       if (val !== null && (!best || val > best.moyenne)) {
-        best = { matiere: m.matiere.split(" > ")[0], moyenne: val }
+        best = { matiere: (m.matiere || "—").split(" > ")[0], moyenne: val }
       }
     }
     return best

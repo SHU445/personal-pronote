@@ -24,8 +24,8 @@ export function MoyennesChart({ moyennes }: MoyennesChartProps) {
   // Preparer les donnees pour le graphique
   const data = moyennes
     .map((m) => ({
-      name: m.matiere.split(" > ")[0].slice(0, 15),
-      fullName: m.matiere,
+      name: (m.matiere || "—").split(" > ")[0].slice(0, 15),
+      fullName: m.matiere || "—",
       eleve: parseNote(m.moyenne_eleve) || 0,
       classe: parseNote(m.moyenne_classe) || 0,
     }))

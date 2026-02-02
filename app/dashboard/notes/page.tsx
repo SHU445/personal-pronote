@@ -48,7 +48,7 @@ export default function NotesPage() {
       <div>
         <h1 className="text-2xl font-bold">Notes & Moyennes</h1>
         <p className="text-muted-foreground">
-          Consultez vos notes et moyennes par matiere
+          Consultez vos notes et moyennes par matière
         </p>
       </div>
 

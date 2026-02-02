@@ -126,7 +126,10 @@ function SimulationForm({
   // Liste des matières disponibles
   const subjects = useMemo(() => {
     const set = new Set<string>()
-    moyennes.forEach(m => set.add(m.matiere.split(' > ')[0].trim()))
+    moyennes.forEach(m => {
+      const name = (m.matiere || "").split(" > ")[0].trim()
+      if (name) set.add(name)
+    })
     return Array.from(set).sort()
   }, [moyennes])
 

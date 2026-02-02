@@ -12,7 +12,7 @@ L’application peut utiliser une base **Neon** pour stocker les credentials Pro
 Dans le **SQL Editor** du dashboard Neon, exécuter le contenu du fichier `backend/schema.sql` :
 
 - `pronote_credentials` : une ligne (id=1) pour les identifiants de session Pronote.
-- `pronote_cache` : une ligne (id=1) pour le cache des données (notes, devoirs, EDT, etc.).
+- `pronote_cache` : une ligne par semestre (id=1 = Semestre 1, id=2 = Semestre 2) pour le cache des données (notes, moyennes, devoirs, EDT, etc.).
 
 ## 3. Variables d’environnement
 

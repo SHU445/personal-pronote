@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import type { Devoir } from "@/types/pronote"
-import { formatDate, cn } from "@/lib/utils"
+import { formatDate, cn, htmlToPlainText } from "@/lib/utils"
 
 interface DevoirsPreviewProps {
   devoirs: Devoir[]
@@ -95,7 +95,7 @@ export function DevoirsPreview({ devoirs }: DevoirsPreviewProps) {
             const late = isDatePast(devoir.date_rendu)
             return (
               <div
-                key={index}
+                key={`devoir-${devoir.date_rendu}-${(devoir.matiere || "").slice(0, 20)}-${index}`}
                 className={cn(
                   "group flex items-start gap-3 p-3 rounded-xl border transition-all duration-300",
                   "hover:shadow-md hover:-translate-y-0.5",
@@ -117,7 +117,7 @@ export function DevoirsPreview({ devoirs }: DevoirsPreviewProps) {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="font-medium text-sm">
-                      {devoir.matiere.split(" > ")[0]}
+                      {(devoir.matiere || "—").split(" > ")[0]}
                     </span>
                     {late && (
                       <Badge variant="destructive" className="text-[10px] px-1.5 py-0">
@@ -126,7 +126,7 @@ export function DevoirsPreview({ devoirs }: DevoirsPreviewProps) {
                     )}
                   </div>
                   <p className="text-sm text-muted-foreground line-clamp-1 mt-0.5">
-                    {devoir.description}
+                    {htmlToPlainText(devoir.description)}
                   </p>
                   <div className="flex items-center gap-3 mt-2">
                     <div className="flex items-center gap-1 text-xs text-muted-foreground">

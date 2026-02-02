@@ -20,7 +20,9 @@ import {
   type RefreshInformation,
 } from 'pawnote'
 import type { PronoteData, Eleve, Devoir, Note, Moyenne, Lesson, Menu, Discussion, Absence, Retard } from '@/types/pronote'
+import type { Semestre } from './db'
 import { getPronoteCredentials, setPronoteCredentials, deletePronoteCredentials, setPronoteCache } from './db'
+import { htmlToPlainText } from './utils'
 
 const GradeKind = { Error: -1, Grade: 0, Absent: 1, Exempted: 2, NotGraded: 3, Unfit: 4, Unreturned: 5, AbsentZero: 6, UnreturnedZero: 7, Congratulations: 8 } as const
 
@@ -118,7 +120,7 @@ export async function logoutPronote(): Promise<{ success: boolean; error?: strin
   }
 }
 
-/** Récupère toutes les données Pronote et les enregistre en cache. Retourne PronoteData ou { error }. */
+/** Récupère toutes les données Pronote et les enregistre en cache (S1 et S2). Retourne PronoteData du semestre 1 ou { error }. */
 export async function fetchAllPronoteData(): Promise<PronoteData | { error: string; details?: unknown }> {
   const creds = await getPronoteCredentials()
   if (!creds) return { error: 'Non connecté - aucun token sauvegardé' }
@@ -139,8 +141,8 @@ export async function fetchAllPronoteData(): Promise<PronoteData | { error: stri
   const eleve = getEleveFromSession(session)
   const tabGradebook = session.userResource.tabs.get(TabLocation.Gradebook)
   const tabNotebook = session.userResource.tabs.get(TabLocation.Notebook)
-  const period = tabGradebook?.defaultPeriod
-  const notebookPeriod = tabNotebook?.defaultPeriod ?? period
+  const gradebookPeriods = tabGradebook?.periods ?? []
+  const notebookPeriods = tabNotebook?.periods ?? []
 
   const now = new Date()
   const startDate = new Date(now)
@@ -149,52 +151,25 @@ export async function fetchAllPronoteData(): Promise<PronoteData | { error: stri
   endDate.setDate(endDate.getDate() + 30)
 
   let devoirs: Devoir[] = []
-  let notes: Note[] = []
-  let moyennes: Moyenne[] = []
   let lessons: Lesson[] = []
   let menusList: Menu[] = []
   let discussionsList: Discussion[] = []
-  let absences: Absence[] = []
-  let retards: Retard[] = []
 
   try {
-    const [assignmentsRes, gradesRes, timetableRes, menusRes, discussionsRes, notebookRes] = await Promise.all([
+    const [assignmentsRes, timetableRes, menusRes, discussionsRes] = await Promise.all([
       assignmentsFromIntervals(session, startDate, endDate).catch(() => []),
-      period ? gradesOverview(session, period).catch(() => null) : Promise.resolve(null),
       timetableFromIntervals(session, startDate, new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)).catch(() => null),
       pawnoteMenus(session, now).catch(() => null),
       pawnoteDiscussions(session).catch(() => null),
-      notebookPeriod ? notebook(session, notebookPeriod).catch(() => null) : Promise.resolve(null),
     ])
 
     if (Array.isArray(assignmentsRes)) {
       devoirs = assignmentsRes.map((a) => ({
         matiere: a.subject?.name ?? 'Inconnu',
-        description: a.description ?? '',
+        description: htmlToPlainText(a.description ?? ''),
         date_rendu: dateToISO(a.deadline),
         fait: a.done,
         fichiers: (a.attachments ?? []).map((f) => f.name ?? ''),
-      }))
-    }
-
-    if (gradesRes) {
-      notes = (gradesRes.grades ?? []).map((g) => ({
-        matiere: g.subject?.name ?? 'Inconnu',
-        note: formatGradeValue(g.value),
-        bareme: formatGradeValue(g.outOf) || '20',
-        coefficient: g.coefficient ?? 1,
-        moyenne_classe: g.average != null ? formatGradeValue(g.average) : '',
-        note_min: g.min != null ? formatGradeValue(g.min) : '',
-        note_max: g.max != null ? formatGradeValue(g.max) : '',
-        commentaire: '',
-        date: dateToISO(g.date),
-      }))
-      moyennes = (gradesRes.subjectsAverages ?? []).map((s) => ({
-        matiere: s.subject?.name ?? 'Inconnu',
-        moyenne_eleve: s.student != null ? formatGradeValue(s.student) : '',
-        moyenne_classe: s.class_average != null ? formatGradeValue(s.class_average) : '',
-        moyenne_min: s.min != null ? formatGradeValue(s.min) : '',
-        moyenne_max: s.max != null ? formatGradeValue(s.max) : '',
       }))
     }
 
@@ -253,44 +228,98 @@ export async function fetchAllPronoteData(): Promise<PronoteData | { error: stri
         dernier_message: '',
       }))
     }
-
-    if (notebookRes) {
-      absences = (notebookRes.absences ?? []).map((a) => ({
-        date_debut: a.startDate ? new Date(a.startDate).toISOString() : '',
-        date_fin: a.endDate ? new Date(a.endDate).toISOString() : '',
-        justifie: a.justified ?? false,
-        motif: a.reason ?? '',
-        heures: (a.hoursMissed ?? 0) + (a.minutesMissed ?? 0) / 60,
-      }))
-      retards = (notebookRes.delays ?? []).map((r) => ({
-        date: r.date ? new Date(r.date).toISOString() : '',
-        justifie: r.justified ?? false,
-        motif: r.reason ?? r.justification ?? '',
-        minutes: r.minutes ?? 0,
-      }))
-    }
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e)
     return { error: msg, details: { token_expired: /token|expire/i.test(msg) } }
   }
 
-  const data: PronoteData = {
+  const shared = {
     export_date: new Date().toISOString(),
     eleve,
     devoirs,
-    notes,
-    moyennes,
     lessons,
     menus: menusList,
     discussions: discussionsList,
-    absences,
-    retards,
   }
 
-  try {
-    await setPronoteCache((data as unknown) as Record<string, unknown>)
-  } catch {
-    // ignore cache write error, still return data
+  let lastData: PronoteData | null = null
+  for (let i = 0; i <= 1; i++) {
+    const semestre = (i + 1) as Semestre
+    const period = gradebookPeriods[i] ?? null
+    const notebookPeriod = notebookPeriods[i] ?? period ?? notebookPeriods[0] ?? tabNotebook?.defaultPeriod ?? period
+    if (!period) continue
+
+    let notes: Note[] = []
+    let moyennes: Moyenne[] = []
+    let absences: Absence[] = []
+    let retards: Retard[] = []
+
+    try {
+      const [gradesRes, notebookRes] = await Promise.all([
+        gradesOverview(session, period).catch(() => null),
+        notebookPeriod ? notebook(session, notebookPeriod).catch(() => null) : Promise.resolve(null),
+      ])
+
+      if (gradesRes) {
+        notes = (gradesRes.grades ?? []).map((g) => ({
+          matiere: g.subject?.name ?? 'Inconnu',
+          note: formatGradeValue(g.value),
+          bareme: formatGradeValue(g.outOf) || '20',
+          coefficient: g.coefficient ?? 1,
+          moyenne_classe: g.average != null ? formatGradeValue(g.average) : '',
+          note_min: g.min != null ? formatGradeValue(g.min) : '',
+          note_max: g.max != null ? formatGradeValue(g.max) : '',
+          commentaire: '',
+          date: dateToISO(g.date),
+        }))
+        moyennes = (gradesRes.subjectsAverages ?? []).map((s) => ({
+          matiere: s.subject?.name ?? 'Inconnu',
+          moyenne_eleve: s.student != null ? formatGradeValue(s.student) : '',
+          moyenne_classe: s.class_average != null ? formatGradeValue(s.class_average) : '',
+          moyenne_min: s.min != null ? formatGradeValue(s.min) : '',
+          moyenne_max: s.max != null ? formatGradeValue(s.max) : '',
+        }))
+      }
+
+      if (notebookRes) {
+        absences = (notebookRes.absences ?? []).map((a) => ({
+          date_debut: a.startDate ? new Date(a.startDate).toISOString() : '',
+          date_fin: a.endDate ? new Date(a.endDate).toISOString() : '',
+          justifie: a.justified ?? false,
+          motif: a.reason ?? '',
+          heures: (a.hoursMissed ?? 0) + (a.minutesMissed ?? 0) / 60,
+        }))
+        retards = (notebookRes.delays ?? []).map((r) => ({
+          date: r.date ? new Date(r.date).toISOString() : '',
+          justifie: r.justified ?? false,
+          motif: r.reason ?? r.justification ?? '',
+          minutes: r.minutes ?? 0,
+        }))
+      }
+    } catch {
+      // ignorer erreur pour ce semestre, continuer avec l'autre
+    }
+
+    const data: PronoteData = {
+      ...shared,
+      notes,
+      moyennes,
+      absences,
+      retards,
+    }
+    lastData = data
+    try {
+      await setPronoteCache((data as unknown) as Record<string, unknown>, semestre)
+    } catch {
+      // ignore cache write error
+    }
   }
-  return data
+
+  return lastData ?? {
+    ...shared,
+    notes: [],
+    moyennes: [],
+    absences: [],
+    retards: [],
+  }
 }

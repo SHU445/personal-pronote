@@ -4,7 +4,7 @@ import { promisify } from 'util'
 import path from 'path'
 import { promises as fs } from 'fs'
 import { useNeon } from '@/lib/db'
-import { checkCredentialsExist, connectWithToken } from '@/lib/pronote'
+import { checkCredentialsExist } from '@/lib/pronote'
 
 const execAsync = promisify(exec)
 
@@ -21,22 +21,26 @@ function logError(message: string, error?: unknown) {
 export async function GET() {
   log('=== VERIFICATION STATUT AUTH ===')
 
+  const noCacheHeaders = { 'Cache-Control': 'no-store, no-cache, must-revalidate' }
+
   if (useNeon()) {
     try {
       const exist = await checkCredentialsExist()
       if (!exist.connected) {
         log('Neon: aucun credentials')
-        return NextResponse.json({ connected: false, error: exist.error ?? 'Aucun token sauvegardé' })
+        return NextResponse.json({ connected: false, error: exist.error ?? 'Aucun token sauvegardé' }, { headers: noCacheHeaders })
       }
-      const result = await connectWithToken()
-      log('Neon: résultat connectWithToken', { connected: result.connected })
-      return NextResponse.json(result)
+      // Ne pas appeler connectWithToken() ici : évite double connexion Pronote
+      // (dashboard fait ensuite refreshData qui se connecte). Sinon 2 appels
+      // simultanés en Strict Mode peuvent faire échouer l'un et déconnecter.
+      log('Neon: credentials présents, statut connecté')
+      return NextResponse.json({ connected: true }, { headers: noCacheHeaders })
     } catch (error) {
       logError('Neon exception:', error)
       return NextResponse.json({
         connected: false,
         error: error instanceof Error ? error.message : 'Erreur inconnue'
-      })
+      }, { headers: noCacheHeaders })
     }
   }
 
@@ -64,12 +68,12 @@ export async function GET() {
     if (stderr) log('STDERR:', stderr)
     const result = JSON.parse(stdout.trim())
     log('Résultat:', result)
-    return NextResponse.json(result)
+    return NextResponse.json(result, { headers: noCacheHeaders })
   } catch (error) {
     logError('Exception:', error)
     return NextResponse.json({
       connected: false,
       error: error instanceof Error ? error.message : 'Erreur inconnue'
-    })
+    }, { headers: noCacheHeaders })
   }
 }
