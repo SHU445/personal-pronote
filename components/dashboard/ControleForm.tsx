@@ -14,6 +14,7 @@ import { addControle, deleteControle, getUpcomingControles } from "@/lib/user-co
 import { getDaysUntil } from "@/lib/focus-engine"
 
 interface ControleFormProps {
+  /** Appelé après ajout ou suppression d'un contrôle pour rafraîchir le plan Focus Tonight */
   onControleAdded?: () => void
 }
 
@@ -242,6 +243,7 @@ export function ControleForm({ onControleAdded }: ControleFormProps) {
   const handleDelete = (id: string) => {
     deleteControle(id)
     setControles(getUpcomingControles())
+    onControleAdded?.()
   }
 
   return (

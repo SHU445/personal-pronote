@@ -81,12 +81,17 @@ export interface Retard {
   minutes: number
 }
 
+/** 1 = Semestre 1, 2 = Semestre 2 (pour le sélecteur de période). */
+export type Semestre = 1 | 2
+
 export interface PronoteData {
   export_date: string
   eleve: Eleve
   devoirs: Devoir[]
   notes: Note[]
   moyennes: Moyenne[]
+  /** Période Pronote où apparaissent les nouvelles notes (pour afficher la bonne par défaut). */
+  defaultSemestre?: Semestre
   lessons?: Lesson[]
   menus?: Menu[]
   discussions?: Discussion[]

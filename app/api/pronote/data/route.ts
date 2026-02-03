@@ -25,6 +25,13 @@ function parseSemestre(searchParams: URLSearchParams): Semestre {
   return 1
 }
 
+/** Erreur Pawnote "Unable to resolve the challenge" = token/credentials à renouveler. */
+function isTokenOrChallengeError(errorMessage: string | undefined): boolean {
+  if (!errorMessage || typeof errorMessage !== 'string') return false
+  const msg = errorMessage.toLowerCase()
+  return /expire|token|challenge|credentials/i.test(msg)
+}
+
 // GET: Lire les donnees en cache (Neon ou fichier) pour le semestre demandé
 export async function GET(request: Request) {
   log('=== GET CACHE DATA ===')
@@ -106,19 +113,20 @@ export async function POST(request: Request) {
         log('Neon refresh erreur:', result.error)
         const row = await getPronoteCache(semestre)
         const cachedData = (row?.data as Record<string, unknown>) ?? {}
+        const tokenExpired = (result.details as { token_expired?: boolean })?.token_expired ?? isTokenOrChallengeError(result.error)
         if (Object.keys(cachedData).length > 0) {
           return NextResponse.json({
             success: true,
             data: cachedData,
             cached: true,
             error: result.error,
-            tokenExpired: (result.details as { token_expired?: boolean })?.token_expired ?? /expire|token/i.test(result.error)
+            tokenExpired,
           })
         }
         return NextResponse.json({
           success: false,
           error: result.error,
-          tokenExpired: (result.details as { token_expired?: boolean })?.token_expired ?? /expire|token/i.test(result.error)
+          tokenExpired,
         })
       }
       log('Neon refresh succès:', { export_date: result.export_date, eleve: result.eleve?.nom })
@@ -133,6 +141,8 @@ export async function POST(request: Request) {
       })
     } catch (error) {
       logError('Neon exception:', error)
+      const errMsg = error instanceof Error ? error.message : 'Erreur'
+      const tokenExpired = isTokenOrChallengeError(errMsg)
       const row = await getPronoteCache(semestre)
       const data = (row?.data as Record<string, unknown>) ?? {}
       if (Object.keys(data).length > 0) {
@@ -140,12 +150,14 @@ export async function POST(request: Request) {
           success: true,
           data,
           cached: true,
-          refreshError: error instanceof Error ? error.message : 'Erreur'
+          error: errMsg,
+          tokenExpired,
         })
       }
       return NextResponse.json({
         success: false,
-        error: error instanceof Error ? error.message : 'Erreur'
+        error: errMsg,
+        tokenExpired,
       })
     }
   }

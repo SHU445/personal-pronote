@@ -66,6 +66,13 @@ export default function DashboardLayout({
         setLoading(false)
         setError(null)
         hasData = true
+        const defaultS = (cached.data as { defaultSemestre?: Semestre }).defaultSemestre
+        if (defaultS != null && defaultS !== s) {
+          setSemestre(defaultS)
+          getCachedData(defaultS).then((res) => {
+            if (res.data) setData(res.data)
+          })
+        }
       }
 
       // Puis actualiser en arriere-plan
@@ -76,14 +83,30 @@ export default function DashboardLayout({
       // Priorite aux donnees, meme si erreur presente
       if (fresh.data) {
         setData(fresh.data)
-        setLastRefresh(fresh.refreshedAt || new Date().toISOString())
-        setError(null)
+        if (fresh.refreshedAt) setLastRefresh(fresh.refreshedAt)
         hasData = true
+        // Si le refresh a echoue (token/challenge), afficher le bandeau pour se reconnecter meme avec cache
+        const tokenExpired = (fresh as { tokenExpired?: boolean }).tokenExpired
+        if (fresh.error && tokenExpired) {
+          setError("Session expirée. Veuillez vous reconnecter.")
+        } else if (!fresh.refreshedAt && fresh.error) {
+          setError("Données en cache. Actualisation impossible — reconnectez-vous pour rafraîchir.")
+        } else {
+          setError(null)
+        }
+        // Afficher par defaut la periode ou se trouvent les nouvelles notes (celle de Pronote)
+        const defaultS = (fresh.data as { defaultSemestre?: Semestre }).defaultSemestre
+        if (defaultS != null && defaultS !== s) {
+          setSemestre(defaultS)
+          getCachedData(defaultS).then((res) => {
+            if (res.data) setData(res.data)
+          })
+        }
       }
       
       // Afficher erreur seulement si aucune donnee disponible
       if (!hasData && fresh.error) {
-        if (fresh.error.includes("expire") || fresh.error.includes("Non connecte")) {
+        if (fresh.error.includes("expire") || fresh.error.includes("Non connecte") || (fresh as { tokenExpired?: boolean }).tokenExpired) {
           setError("Session expirée. Veuillez vous reconnecter.")
         } else {
           setError(fresh.error)
@@ -197,17 +220,21 @@ export default function DashboardLayout({
             lastRefresh={lastRefresh || undefined}
           />
           
-          {/* Message d'erreur de session */}
-          {error && error.includes("expirée") && (
+          {/* Message d'erreur / session expirée / données en cache uniquement */}
+          {error && (error.includes("expirée") || error.includes("cache")) && (
             <div className="mx-4 mt-4 lg:mx-6 p-4 bg-destructive/10 border-2 border-destructive/20 rounded-xl flex items-center justify-between gap-4 animate-slide-up">
               <div className="flex items-center gap-3">
                 <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-destructive/20">
                   <AlertTriangle className="h-5 w-5 text-destructive" />
                 </div>
                 <div>
-                  <p className="font-semibold text-destructive">Session expirée</p>
+                  <p className="font-semibold text-destructive">
+                    {error.includes("expirée") ? "Session expirée" : "Actualisation impossible"}
+                  </p>
                   <p className="text-sm text-muted-foreground">
-                    Votre token Pronote a expiré. Veuillez vous reconnecter avec un nouveau QR code.
+                    {error.includes("expirée")
+                      ? "Votre token Pronote a expiré. Veuillez vous reconnecter avec un nouveau QR code."
+                      : "Les données affichées sont en cache. Reconnectez-vous pour récupérer les dernières données Pronote."}
                   </p>
                 </div>
               </div>

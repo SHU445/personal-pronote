@@ -454,9 +454,10 @@ export function FocusTonight({
     setConfig(loadConfig())
   }, [])
 
-  // Générer le plan : on lit les contrôles depuis localStorage pour être sûr d'avoir les derniers (après ajout)
+  // Générer le plan : utiliser les contrôles du parent s'il en fournit (après ajout/suppression), sinon localStorage
   const plan = useMemo(() => {
-    const controlesPourPlan = typeof window !== "undefined" ? loadControles() : (controles ?? [])
+    const fromStorage = typeof window !== "undefined" ? loadControles() : []
+    const controlesPourPlan = controles && controles.length > 0 ? controles : fromStorage
     return generateFocusPlan(devoirs, notes, moyennes, controlesPourPlan, config, lessons)
   }, [devoirs, notes, moyennes, controles, config, lessons, refreshKey, planRefreshKey])
 

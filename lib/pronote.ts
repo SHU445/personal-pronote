@@ -26,9 +26,9 @@ import { htmlToPlainText } from './utils'
 
 const GradeKind = { Error: -1, Grade: 0, Absent: 1, Exempted: 2, NotGraded: 3, Unfit: 4, Unreturned: 5, AbsentZero: 6, UnreturnedZero: 7, Congratulations: 8 } as const
 
-function formatGradeValue(value: { kind: number; points: number }): string {
-  if (!value) return ''
-  if (value.kind === GradeKind.Grade) return String(value.points)
+function formatGradeValue(value: { kind?: number; points?: number } | null | undefined): string {
+  if (value == null || typeof value !== 'object') return ''
+  if (value.kind === GradeKind.Grade) return String(value.points ?? '')
   if (value.kind === GradeKind.Absent || value.kind === GradeKind.AbsentZero) return 'Absent'
   if (value.kind === GradeKind.Exempted) return 'Dispensé'
   if (value.kind === GradeKind.NotGraded) return 'NonNoté'
@@ -37,8 +37,13 @@ function formatGradeValue(value: { kind: number; points: number }): string {
   return String(value.points)
 }
 
+/** Retourne la date au format YYYY-MM-DD en date locale (évite le décalage d'un jour avec toISOString en UTC). */
 function dateToISO(d: Date): string {
-  return d instanceof Date && !isNaN(d.getTime()) ? d.toISOString().slice(0, 10) : ''
+  if (!(d instanceof Date) || isNaN(d.getTime())) return ''
+  const year = d.getFullYear()
+  const month = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
 }
 
 /** Vérifie si des credentials existent en base (sans connexion réseau). */
@@ -233,6 +238,12 @@ export async function fetchAllPronoteData(): Promise<PronoteData | { error: stri
     return { error: msg, details: { token_expired: /token|expire/i.test(msg) } }
   }
 
+  // Période par défaut Pronote (celle où apparaissent les nouvelles notes)
+  const defaultPeriodIndex = tabGradebook?.defaultPeriod
+    ? gradebookPeriods.findIndex((p) => p.id === tabGradebook.defaultPeriod?.id)
+    : -1
+  const defaultSemestre: Semestre = defaultPeriodIndex >= 0 ? ((defaultPeriodIndex + 1) as Semestre) : 1
+
   const shared = {
     export_date: new Date().toISOString(),
     eleve,
@@ -240,6 +251,7 @@ export async function fetchAllPronoteData(): Promise<PronoteData | { error: stri
     lessons,
     menus: menusList,
     discussions: discussionsList,
+    defaultSemestre,
   }
 
   let lastData: PronoteData | null = null
@@ -269,8 +281,8 @@ export async function fetchAllPronoteData(): Promise<PronoteData | { error: stri
           moyenne_classe: g.average != null ? formatGradeValue(g.average) : '',
           note_min: g.min != null ? formatGradeValue(g.min) : '',
           note_max: g.max != null ? formatGradeValue(g.max) : '',
-          commentaire: '',
-          date: dateToISO(g.date),
+          commentaire: (g as { comment?: string }).comment ?? '',
+          date: g.date ? dateToISO(g.date) : '',
         }))
         moyennes = (gradesRes.subjectsAverages ?? []).map((s) => ({
           matiere: s.subject?.name ?? 'Inconnu',
